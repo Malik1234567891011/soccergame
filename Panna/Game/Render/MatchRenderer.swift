@@ -46,7 +46,10 @@ final class MatchRenderer {
     var celebrationCam: Float = 0
     var focusPlayer = -1
 
-    init(theme: ArenaTheme, players: [RenderPlayerInfo], teamColors: [UIColor], humanId: Int, localHumans: Set<Int>, shape: ArenaShape = .standard) {
+    let keeperColors: [UInt32]
+
+    init(theme: ArenaTheme, players: [RenderPlayerInfo], keeperColors: [UInt32] = [0xE8FF3B, 0xFF8A3B], teamColors: [UIColor], humanId: Int, localHumans: Set<Int>, shape: ArenaShape = .standard) {
+        self.keeperColors = keeperColors
         self.theme = theme
         self.shape = shape
         self.teamColors = teamColors
@@ -66,7 +69,7 @@ final class MatchRenderer {
             let info = players[i]
             let keeper = i % 4 == 3
             let ink = teamColors[i / 4].mixed(with: UIColor(red: 0.05, green: 0.03, blue: 0.08, alpha: 1), 0.55)
-            let rig = CharacterRig(appearance: info.appearance, isKeeper: keeper, keeperColor: i < 4 ? 0x2A6BFF : 0xFF7A1A, name: info.name,
+            let rig = CharacterRig(appearance: info.appearance, isKeeper: keeper, keeperColor: keeperColors[i / 4], name: info.name,
                                    modelName: info.model, outlineColor: ink)
             let holder = SCNNode()
             holder.addChildNode(rig.root)

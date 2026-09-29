@@ -249,7 +249,7 @@ struct HypeBar: View {
 
     var body: some View {
         VStack(spacing: 3) {
-            Text(inFlow ? "FLOW · \(name)" : (hype >= 100 ? "FLOW READY" : "HYPE"))
+            Text(inFlow ? "FLOW · \(name)" : (hype >= 100 ? "FLOW READY — TAP ⚡" : "FLOW"))
                 .font(.system(size: 10, weight: .black, design: .rounded))
                 .tracking(2)
                 .foregroundStyle(hype >= 100 || inFlow ? Color(hex: 0xFFD23B) : .white.opacity(0.7))

@@ -8,11 +8,23 @@ bake() {
   side=(); [ -f ${id}_ref_left.png ] && side+=(--left $PWD/${id}_ref_left.png); [ -f ${id}_ref_right.png ] && side+=(--right $PWD/${id}_ref_right.png)
   $B -b -P ../blender/unique.py -- --mesh $PWD/$mesh --front $PWD/$front --back $PWD/${id}_ref_back.png $side --name $id --tris $TRIS 2>&1 | grep -E "UNIQUE exported|Traceback"
 }
-bake luna luna_hy2_shape.glb luna_ref_apose.png &
+pbake() {
+  id=$1; mesh=$2
+  front=${id}_ck_front.png; back=${id}_ck_back.png
+  # Meshes generated from the code-kit art itself match its proportions and pose.
+  [ -f ${id}_ck_shape.glb ] && mesh=${id}_ck_shape.glb
+  [ -f $front ] || front=${id}_ref_front.png
+  [ -f $back ] || back=${id}_ref_back.png
+  side=(); [ -f ${id}_ref_left.png ] && side+=(--left $PWD/${id}_ref_left.png); [ -f ${id}_ref_right.png ] && side+=(--right $PWD/${id}_ref_right.png)
+  $B -b -P ../blender/unique.py -- --mesh $PWD/$mesh --front $PWD/$front --back $PWD/$back $side --name $id --tris $TRIS 2>&1 | grep -E "UNIQUE exported|Traceback"
+}
+pbake luna luna_hy2_shape.glb &
 for id in kairo vega amara sora demba odin rex juno niko zeke amir; do
-  bake $id ${id}_shape.glb ${id}_ref_front.png &
+  [ -n "$ONLY_LOOKS" ] && break
+  pbake $id ${id}_shape.glb &
   while [ $(jobs -r | wc -l) -ge 3 ]; do sleep 2; done
 done
+[ -n "$ONLY_PROSPECTS" ] && { wait; echo "REBAKE DONE $(date +%T)"; exit 0; }
 for f in l[0-9]*_ref_front.png; do
   id=${f%_ref_front.png}
   bake $id ${id}_shape.glb $f &

@@ -28,16 +28,16 @@ enum Selection {
     static let perks: [EgoPerk] = [
         EgoPerk(id: "laser", name: "LASER BOOTS", text: "+12% shot power", icon: "bolt.horizontal.fill", rarity: .rare) { $0.shotPower *= 1.12 },
         EgoPerk(id: "meta", name: "METAVISION", text: "Passes +15% faster", icon: "eye.fill", rarity: .rare) { $0.passSpeed *= 1.15 },
-        EgoPerk(id: "adrenaline", name: "ADRENALINE", text: "Start every match with 50 Hype", icon: "heart.fill", rarity: .epic) { $0.startHype += 50 },
-        EgoPerk(id: "hunger", name: "HUNGER", text: "+30% Hype from everything", icon: "flame.fill", rarity: .epic) { $0.hypeGain *= 1.3 },
+        EgoPerk(id: "adrenaline", name: "ADRENALINE", text: "Start every match half-way to FLOW", icon: "heart.fill", rarity: .epic) { $0.startHype += 50 },
+        EgoPerk(id: "hunger", name: "HUNGER", text: "Fill FLOW 30% faster", icon: "flame.fill", rarity: .epic) { $0.hypeGain *= 1.3 },
         EgoPerk(id: "lungs", name: "IRON LUNGS", text: "Sprint drains 40% slower", icon: "wind", rarity: .rare) { $0.staminaDrain *= 0.6 },
         EgoPerk(id: "predator", name: "PREDATOR", text: "Tackles reach 30cm further", icon: "scope", rarity: .rare) { $0.tackleReach += 0.3 },
         EgoPerk(id: "ice", name: "ICE VEINS", text: "Perfect-strike window much wider", icon: "snowflake", rarity: .epic) { $0.perfectWindow += 0.05 },
         EgoPerk(id: "drive", name: "DIRECT DRIVE", text: "+8% sprint speed", icon: "hare.fill", rarity: .epic) { $0.sprint *= 1.08 },
         EgoPerk(id: "ankles", name: "ANKLE BREAKER", text: "Skill moves fool defenders far more often", icon: "sparkles", rarity: .rare) { $0.bite += 0.22 },
-        EgoPerk(id: "panna", name: "PANNA HUNTER", text: "Every nutmeg fills 50 extra Hype", icon: "circle.hexagongrid", rarity: .legendary) { $0.nutmegHype += 50 },
+        EgoPerk(id: "panna", name: "PANNA HUNTER", text: "Every nutmeg fills FLOW by half", icon: "circle.hexagongrid", rarity: .legendary) { $0.nutmegHype += 50 },
         EgoPerk(id: "longflow", name: "ENDLESS FLOW", text: "FLOW lasts 3 seconds longer", icon: "infinity", rarity: .legendary) { $0.flowDuration += 3 },
-        EgoPerk(id: "ego", name: "PURE EGO", text: "+20% shot power, +20% Hype", icon: "crown.fill", rarity: .legendary) { $0.shotPower *= 1.2; $0.hypeGain *= 1.2 },
+        EgoPerk(id: "ego", name: "PURE EGO", text: "+20% shot power, FLOW fills 20% faster", icon: "crown.fill", rarity: .legendary) { $0.shotPower *= 1.2; $0.hypeGain *= 1.2 },
     ]
     static func perk(_ id: String) -> EgoPerk? { perks.first { $0.id == id } }
 

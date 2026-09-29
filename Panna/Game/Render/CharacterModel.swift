@@ -43,6 +43,7 @@ final class CharacterModel {
     static let shared: CharacterModel = CharacterModel.load("base")!
     static var cache: [String: CharacterModel] = [:]
     let texture: UIImage?
+    var kitMask: UIImage?
 
     /// Loads a model from the bundle (`name.bin`, optional `name.png` baked texture for unique characters).
     static func load(_ name: String) -> CharacterModel? {
@@ -55,6 +56,7 @@ final class CharacterModel {
         let tex = (Bundle.main.url(forResource: name, withExtension: "jpg") ?? Bundle.main.url(forResource: name, withExtension: "png"))
             .flatMap { UIImage(contentsOfFile: $0.path) }
         let m = CharacterModel(header, blob: blob, texture: tex)
+        m.kitMask = Bundle.main.url(forResource: name + "_mask", withExtension: "png").flatMap { UIImage(contentsOfFile: $0.path) }
         cache[name] = m
         return m
     }

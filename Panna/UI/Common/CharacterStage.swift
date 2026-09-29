@@ -85,12 +85,18 @@ final class CharacterStage: NSObject, SCNSceneRendererDelegate, ObservableObject
             switch animation {
             case .idle: break
             case .run:
-                p.speed = 6; p.runPhase = t * 6
+                p.speed = 6
+                if let f = ProcessInfo.processInfo.environment["PANNA_FREEZE"], let ft = Float(f) { p.runPhase = ft } else { p.runPhase = t * 6 }
             case .celebrate:
                 p.action = .celebrate; p.actionT = t.truncatingRemainder(dividingBy: 3.5); p.actionDur = 99; p.celebration = i % Celebration.allCases.count
             case .kick:
-                let c = t.truncatingRemainder(dividingBy: 1.6)
-                if c < 0.4 { p.action = .kick; p.actionT = c; p.actionDur = 0.4 }
+                // PANNA_FREEZE=0.2 pins the animation at that action time (for frame-by-frame review).
+                if let f = ProcessInfo.processInfo.environment["PANNA_FREEZE"], let ft = Float(f) {
+                    p.action = .kick; p.actionT = ft; p.actionDur = 0.4
+                } else {
+                    let c = t.truncatingRemainder(dividingBy: 1.6)
+                    if c < 0.4 { p.action = .kick; p.actionT = c; p.actionDur = 0.4 }
+                }
             }
             r.pose(p, dt: dt)
             if turntable { holders[i].eulerAngles.y = sin(t * spin) * 0.5 + yaw } else { holders[i].eulerAngles.y = yaw }

@@ -118,11 +118,6 @@ struct LockerView: View {
                         }
                         .buttonStyle(PressStyle())
                     }
-                    Button { set { $0.look = nil } } label: {
-                        Text("CLASSIC\nBUILDER").font(.label(9, .black)).multilineTextAlignment(.center).foregroundStyle(.white)
-                            .frame(width: 58, height: 58).background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(draft.look == nil ? Theme.green : .white.opacity(0.15), lineWidth: draft.look == nil ? 3 : 1))
-                    }
                 }
             }
             section("NAME") {
@@ -377,7 +372,7 @@ struct MovesTab: View {
         case .maestro: return "Sees everything. FLOW (Vision): passes fly faster and perfectly, teammates make forward runs."
         case .finisher: return "Lives in the box. FLOW (Ice Veins): huge perfect-strike window, extra power, keepers react late."
         case .enforcer: return "Wins it back. FLOW (The Wall): longer reach, every tackle wins and keeps the ball."
-        case .trickster: return "Street magic. FLOW (Showtime): skill moves beat everyone nearby and hype up your team."
+        case .trickster: return "Street magic. FLOW (Showtime): skill moves beat everyone nearby and fire up your team."
         }
     }
 

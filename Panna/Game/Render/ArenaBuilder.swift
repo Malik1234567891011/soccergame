@@ -343,7 +343,7 @@ final class ArenaBuilder {
         let t = theme
         return Tex.render(CGSize(width: 1024, height: 64), key: "led-\(t.id)") { c, s in
             c.setFillColor(UIColor.black.cgColor); c.fill(CGRect(origin: .zero, size: s))
-            let words = ["PANNA", "STREET FOOTBALL", t.city.uppercased(), "NUTMEG = +HYPE", "PANNA", t.name]
+            let words = ["PANNA", "STREET FOOTBALL", t.city.uppercased(), "NUTMEG = FLOW", "PANNA", t.name]
             var x: CGFloat = 10
             var i = 0
             UIGraphicsPushContext(c)

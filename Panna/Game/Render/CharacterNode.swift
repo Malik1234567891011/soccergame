@@ -24,7 +24,8 @@ struct PoseInput {
 /// An anime footballer: skinned mesh from Blender, cel-shaded, inked, with a runtime-drawn face.
 final class CharacterRig {
     let root = SCNNode()
-    let body = SCNNode()          // skeleton space; whole-body tilts (dives, flips, slides)
+    let spin = SCNNode()          // whole-body rotations pivot here, at hip height (flips, dives, slides)
+    let body = SCNNode()          // skeleton space
     let model: CharacterModel
     let unique: Bool
     private(set) var appearance: Appearance
@@ -35,6 +36,7 @@ final class CharacterRig {
     private var headMaterial: SCNMaterial?
     let outlineColor: UIColor?
     let tinted: Bool
+    let modelKey: String
     private var expression: FaceExpression = .neutral
     private var blinkT: Float = 2
     private var exprHold: Float = 0
@@ -48,15 +50,23 @@ final class CharacterRig {
     let scale: Float
 
     init(appearance: Appearance, isKeeper: Bool = false, keeperColor: UInt32 = 0x2A2F3A, name: String = "", modelName: String? = nil, outlineColor: UIColor? = nil) {
+        var appearance = appearance
+        if modelName == nil && appearance.look == nil, !Catalog.looks.isEmpty {
+            let a1: Int = appearance.skinTone * 131
+            let a2: Int = appearance.hairColor * 17 + appearance.number
+            appearance.look = Catalog.looks[(a1 + a2) % Catalog.looks.count]
+        }
         let chosen = modelName ?? appearance.look
+        modelKey = chosen ?? "base"
         if let mn = chosen, let m = CharacterModel.load(mn), (!isKeeper || appearance.look != nil) { model = m; unique = true }
         else { model = CharacterModel.shared; unique = false }
-        tinted = modelName == nil && appearance.look != nil
+        tinted = unique
         self.outlineColor = outlineColor
         var a = appearance
         if isKeeper {
-            a.primary = keeperColor; a.secondary = 0xE8FF3B; a.shirtPattern = .gradient; a.number = 1
-            a.socks = keeperColor; a.sleeves = .long; a.accessory = .gloves
+            let light = Double((keeperColor >> 16) & 0xFF) * 0.3 + Double((keeperColor >> 8) & 0xFF) * 0.59 + Double(keeperColor & 0xFF) * 0.11 > 150
+            a.primary = keeperColor; a.secondary = light ? 0x16181F : 0xFFFFFF; a.shirtPattern = .gradient; a.number = 1
+            a.socks = keeperColor; a.shorts = light ? 0x16181F : keeperColor; a.sleeves = .long; a.accessory = .gloves
         }
         self.appearance = a
         self.isKeeper = isKeeper
@@ -77,7 +87,10 @@ final class CharacterRig {
 
     private func build(name: String) {
         let a = appearance
-        root.addChildNode(body)
+        root.addChildNode(spin)
+        spin.position = SCNVector3(0, hipHeight, 0)
+        spin.pivot = SCNMatrix4MakeTranslation(0, hipHeight, 0)
+        spin.addChildNode(body)
         defer { if unique == false { buildAccessories(a) } }
         // Skeleton.
         for (i, bn) in model.boneNames.enumerated() {
@@ -160,13 +173,18 @@ final class CharacterRig {
     private func buildUnique() {
         let boneInv = model.restWorld.map { NSValue(scnMatrix4: SCNMatrix4(simd_inverse($0))) }
         let a = appearance
-        let kit = tinted ? Toon.Kit(primary: UIColor(hex: a.primary), secondary: UIColor(hex: a.secondary), shorts: UIColor(hex: a.shorts), socks: UIColor(hex: a.socks)) : nil
-        let mat = Toon.paintedMaterial(texture: model.texture, kit: kit, shadow: SIMD3(0.8, 0.78, 0.9))
+        var tex = model.texture
+        if tinted, let t = model.texture {
+            let kit = KitRecolor.Kit(primary: a.primary, secondary: a.secondary, shorts: a.shorts, socks: a.socks)
+            tex = KitRecolor.image(t, id: modelKey, kit: kit, mask: model.kitMask)
+        }
+        let mat = Toon.material(.white, texture: tex, spec: 0.0, rim: 0.12, shadow: SIMD3(0.84, 0.82, 0.92))
         mat.diffuse.wrapS = .clamp; mat.diffuse.wrapT = .clamp
         let outline = Toon.outlineMaterial(width: 0.012, color: outlineColor)
         for m in model.meshes {
             let g = SCNGeometry(sources: m.sources, elements: m.elements + [m.outlineElement])
-            g.materials = m.elements.map { _ in mat } + [outline]
+            let noOutline = ProcessInfo.processInfo.environment["PANNA_NOOUTLINE"] != nil
+            g.materials = m.elements.map { _ in mat } + [noOutline ? SCNMaterial.hidden : outline]
             let node = SCNNode(geometry: g)
             let sk = SCNSkinner(baseGeometry: g, bones: bones, boneInverseBindTransforms: boneInv, boneWeights: m.boneWeights, boneIndices: m.boneIndices)
             sk.skeleton = body
@@ -253,13 +271,15 @@ final class CharacterRig {
 
     // MARK: - Bone solve
 
-    private func setBone(_ name: String, _ e: SCNVector3, correction: simd_quatf? = nil) {
+    private func setBone(_ name: String, _ e: SCNVector3, correction: simd_quatf? = nil, conjugate: simd_quatf? = nil) {
         let i = model.boneIndex(name)
         guard i < bones.count else { return }
         let qx = simd_quatf(angle: e.x, axis: SIMD3(1, 0, 0))
         let qy = simd_quatf(angle: e.y, axis: SIMD3(0, 1, 0))
         let qz = simd_quatf(angle: e.z, axis: SIMD3(0, 0, 1))
         var E = qx * qy * qz
+        // Child of a corrected bone: express the bend in the corrected (arm-hanging) frame.
+        if let c = conjugate { E = c.inverse * E * c }
         if let c = correction { E = E * c }
         let p = model.boneParents[i]
         let wp = p >= 0 ? restRot[p] : simd_quatf(angle: 0, axis: SIMD3(0, 1, 0))
@@ -359,11 +379,17 @@ final class CharacterRig {
             k = 1 - exp(-dt * 38)
             let lofted = p.variant == 1
             if p.variant == 2 {
-                // Bicycle kick.
-                bodyRot.x = -Float.pi * min(t / 0.45, 1.1)
-                bodyY = sin(min(t / 0.7, 1) * .pi) * 0.9
-                hipR.x = -1.6 + sin(t * 18) * 0.6; hipL.x = 0.8
-                shL.z = -1.4; shR.z = 1.4
+                // Bicycle kick: fall back, scissor the legs overhead, land on the back.
+                let f = min(1, t / max(p.actionDur, 0.01))
+                let tilt = min(1, f / 0.45)
+                bodyRot.x = -1.75 * (tilt * tilt * (3 - 2 * tilt))
+                let air = f < 0.65 ? sin(f / 0.65 * .pi) * 0.75 : 0
+                bodyY = air - hipHeight * 0.72 * max(0, (f - 0.5) / 0.5)
+                let sc = max(0, min(1, (f - 0.2) / 0.3))
+                hipR.x = -0.4 - 1.6 * sc; kneeR.x = 0.5 * (1 - sc)
+                hipL.x = -1.2 + 1.3 * sc; kneeL.x = 0.9 * sc
+                shL.z = -1.3; shR.z = 1.3; shL.x = 0.4; shR.x = 0.4
+                headR.x = -0.4
             } else if prog < 0.35 {
                 hipR.x = 0.9; kneeR.x = 1.5; spineR.x = -0.12
                 shL.z = -0.9; shR.z = 0.6
@@ -384,20 +410,24 @@ final class CharacterRig {
             hipL.x = 0.4; kneeL.x = 1.2; hipR.x = -0.2; kneeR.x = 0.6
         case .tackle:
             k = 1 - exp(-dt * 35)
-            hipR.x = -1.35; kneeR.x = 0.1
-            hipL.x = 0.5; kneeL.x = 0.9
-            spineR.x = 0.35
-            shL.z = -0.8; shR.z = 0.8
-            hipsY = hipHeight - 0.18
+            // Poke: plant, then stab the leading foot at the ball and recover.
+            let tp = min(1, t / max(p.actionDur, 0.01))
+            let reach = tp < 0.25 ? tp / 0.25 : (tp < 0.65 ? 1 : max(0, 1 - (tp - 0.65) / 0.35))
+            hipR.x = -1.05 * reach; kneeR.x = 0.15 + 0.5 * (1 - reach)
+            hipL.x = 0.35 * reach; kneeL.x = 0.55 * reach + 0.15
+            spineR.x = 0.15 + 0.2 * reach
+            shL.z = -0.55 * reach - 0.15; shR.z = 0.55 * reach + 0.15; shL.x = -0.3 * reach
+            hipsY = hipHeight - 0.14 * reach
         case .slide:
             k = 1 - exp(-dt * 30)
+            // Lean back onto one hip, lead leg straight at the ball, trailing leg tucked, hand planted.
             bodyRot.x = -1.05
-            bodyY = -0.25
-            hipsY = hipHeight * 0.55
-            hipR.x = -1.1; kneeR.x = 0.05
-            hipL.x = -0.3; kneeL.x = 1.4
-            shL.x = 0.8; shL.z = -0.5; shR.z = 1.0; elL.x = -0.2
-            spineR.x = 0.5
+            bodyY = -hipHeight * 0.6
+            hipR.x = -0.55; kneeR.x = 0.05
+            hipL.x = -0.45; kneeL.x = 1.0
+            shL.x = 0.9; shL.z = -0.35; elL.x = -0.1
+            shR.z = 0.9; shR.x = -0.4
+            spineR.x = 0.55; headR.x = 0.35
         case .skill:
             k = 1 - exp(-dt * 34)
             let ph = t / max(p.actionDur, 0.01)
@@ -441,7 +471,7 @@ final class CharacterRig {
         case .knockdown:
             k = 1 - exp(-dt * 16)
             bodyRot.x = 1.35
-            bodyY = -0.62
+            bodyY = -hipHeight * 0.78
             shL.x = -2.4; shR.x = -2.2
             hipL.x = 0.2; hipR.x = 0.1
         case .dive:
@@ -449,7 +479,7 @@ final class CharacterRig {
             let side: Float = p.localDir.x >= 0 ? 1 : -1
             let dp = min(t / 0.3, 1)
             bodyRot.z = -side * 1.35 * dp
-            bodyY = p.height + 0.1 * dp
+            bodyY = p.height - hipHeight * 0.5 * dp
             shL.z = -2.8; shR.z = 2.8
             elL.x = 0; elR.x = 0
             hipL.z = -0.3; hipR.z = 0.3
@@ -481,7 +511,7 @@ final class CharacterRig {
         setBone("shin.R", jKneeL); setBone("shin.L", jKneeR)
         setBone("foot.R", jAnkL); setBone("foot.L", jAnkR)
         setBone("upperarm.R", jShL, correction: armCorrection[0]); setBone("upperarm.L", jShR, correction: armCorrection[1])
-        setBone("forearm.R", jElL); setBone("forearm.L", jElR)
+        setBone("forearm.R", jElL, conjugate: armCorrection[0]); setBone("forearm.L", jElR, conjugate: armCorrection[1])
         setBone("spine", jSpine * 0.5); setBone("chest", jSpine * 0.5)
         setBone("neck", jHead * 0.35); setBone("head", jHead * 0.65)
         curHipsY += (hipsY - curHipsY) * k
@@ -493,11 +523,16 @@ final class CharacterRig {
         // Take the short way round (celebration spins end at 2π).
         while curBody.y - bodyRot.y > .pi { curBody.y -= 2 * .pi }
         while bodyRot.y - curBody.y > .pi { curBody.y += 2 * .pi }
-        let kb = p.action == .kick && p.variant == 2 ? Float(1) : k
+        let flipping = (p.action == .kick && p.variant == 2) || (p.action == .celebrate && p.celebration == Celebration.backflip.rawValue)
+        if !flipping {
+            while curBody.x - bodyRot.x > .pi { curBody.x -= 2 * .pi }
+            while bodyRot.x - curBody.x > .pi { curBody.x += 2 * .pi }
+        }
+        let kb = flipping ? Float(1) : k
         curBody = SCNVector3(curBody.x + (bodyRot.x - curBody.x) * kb, curBody.y + (bodyRot.y - curBody.y) * kb, curBody.z + (bodyRot.z - curBody.z) * kb)
-        body.eulerAngles = curBody
-        curBodyY += (bodyY - curBodyY) * k
-        body.position.y = curBodyY
+        spin.eulerAngles = curBody
+        curBodyY += (bodyY - curBodyY) * (flipping ? Float(1) : k)
+        spin.position.y = hipHeight + curBodyY
         updateExpression(p, dt: dt)
     }
 
@@ -514,6 +549,14 @@ final class CharacterRig {
         let ct = max(0, t - (running ? 1.6 : 0.2))
         switch Celebration(rawValue: p.celebration) ?? .siu {
         case .siu:
+            if ct >= 1.4 {
+                // Held: chest out, arms flung down and back, crowd roar.
+                bodyRot.y = 2 * .pi
+                hipL.z = -0.4; hipR.z = 0.4
+                shL.z = -0.75; shR.z = 0.75; shL.x = 0.55; shR.x = 0.55; elL.x = -0.05; elR.x = -0.05
+                spineR.x = -0.3 + sin(ct * 3) * 0.03; headR.x = -0.45
+                break
+            }
             if ct < 0.5 {
                 bodyY = sin(ct / 0.5 * .pi) * 0.7
                 bodyRot.y = ct / 0.5 * 2 * .pi
@@ -527,7 +570,7 @@ final class CharacterRig {
                 elL.x = -0.1; elR.x = -0.1
             }
         case .kneeSlide:
-            hipsY = 0.35
+            hipsY = hipHeight * 0.56
             hipL.x = -0.1; kneeL.x = 1.7; hipR.x = -0.1; kneeR.x = 1.7
             spineR.x = -0.5; headR.x = -0.5
             shL.z = -2.3; shR.z = 2.3; elL.x = 0; elR.x = 0
@@ -538,11 +581,27 @@ final class CharacterRig {
             let a = ct * 7
             hipL.x = -sin(a) * 0.5; hipR.x = sin(a) * 0.5
         case .backflip:
-            let f = min(ct / 0.8, 1)
-            bodyRot.x = -2 * .pi * f
-            bodyY = sin(f * .pi) * 1.1
-            kneeL.x = 1.4 * sin(f * .pi); kneeR.x = 1.4 * sin(f * .pi); hipL.x = -1.0 * sin(f * .pi); hipR.x = -1.0 * sin(f * .pi)
-            shL.z = -2.6 * (1 - f) - 0.3; shR.z = 2.6 * (1 - f) + 0.3
+            // Crouch → launch → tucked flip around the hips → land → arms-up hold.
+            let crouch = min(1, ct / 0.18)
+            let f = max(0, min(1, (ct - 0.18) / 0.62))
+            let tuck = sin(f * .pi)
+            if ct < 0.18 {
+                hipsY = hipHeight - 0.22 * crouch
+                kneeL.x = 0.9 * crouch; kneeR.x = 0.9 * crouch; hipL.x = -0.6 * crouch; hipR.x = -0.6 * crouch
+                shL.x = 0.8 * crouch; shR.x = 0.8 * crouch
+            } else if f < 1 {
+                bodyRot.x = -2 * .pi * (f * f * (3 - 2 * f))
+                bodyY = tuck * 1.15
+                kneeL.x = 2.0 * tuck; kneeR.x = 2.0 * tuck; hipL.x = -1.6 * tuck; hipR.x = -1.6 * tuck
+                shL.x = -1.0 * tuck; shR.x = -1.0 * tuck; elL.x = -1.2 * tuck; elR.x = -1.2 * tuck
+            } else {
+                let land = min(1, (ct - 0.8) / 0.25)
+                hipsY = hipHeight - 0.12 * (1 - land)
+                kneeL.x = 0.4 * (1 - land) + 0.1; kneeR.x = 0.4 * (1 - land) + 0.1
+                shL.z = -2.6 * land; shR.z = 2.6 * land; elL.x = -0.2; elR.x = -0.2
+                headR.x = -0.35 * land; spineR.x = -0.15 * land
+                bodyRot.x = -2 * .pi
+            }
         case .shush:
             shR.x = -2.4; elR.x = -2.2; shR.z = -0.25
             shL.z = -0.3
@@ -576,4 +635,8 @@ final class CharacterRig {
 /// Celebration ids are persisted in profiles — append only.
 enum Celebration: Int, CaseIterable, Codable {
     case siu, kneeSlide, airplane, backflip, shush, robot, calma, sky, griddy, heart
+}
+
+extension SCNMaterial {
+    static var hidden: SCNMaterial { let m = SCNMaterial(); m.transparency = 0; m.writesToDepthBuffer = false; return m }
 }

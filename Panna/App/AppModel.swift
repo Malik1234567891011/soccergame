@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
         self.store = store
         defer { wireOnline() }
         let env = ProcessInfo.processInfo.environment
+        if let m = env["PANNA_POSESHEET"] { DispatchQueue.main.async { PoseSheet.run(model: m) }; screen = .home; return }
         if env["PANNA_SHOWCASE"] != nil { screen = .showcase; return }
         if let s = env["PANNA_SCREEN"] {
             store.p.tutorialDone = true
@@ -161,11 +162,20 @@ final class AppModel: ObservableObject {
             home.append(prospectParticipant(id, kit: myKit, level: store.p.prospects[id] ?? 1))
         }
         while home.count < 3 { home.append(prospectParticipant("rex", kit: myKit, level: 1)) }
-        let away = crew(oppName, skill: aiSkill, boss: boss)
+        var away = crew(oppName, skill: aiSkill, boss: boss)
         let kit = AppModel.crewKit(oppName)
         // Team identity colour for rings/outlines/HUD: dark kits use their bright trim colour.
         func lum(_ c: UInt32) -> Double { Double((c >> 16) & 0xFF) * 0.3 + Double((c >> 8) & 0xFF) * 0.59 + Double(c & 0xFF) * 0.11 }
-        var awayIdent = lum(kit.0) < 60 ? kit.1 : kit.0
+        // Opponents must never look like us: if their kit is close to ours, they change strip.
+        if KitRecolor.distance(kit.0, myKit.primary) < 0.55 {
+            let alt = KitRecolor.farthest(from: [myKit.primary, myKit.secondary])
+            let trim: UInt32 = lum(alt) > 150 ? 0x16181F : 0xFFFFFF
+            for i in away.indices where away[i].model == nil || true {
+                away[i].appearance.primary = alt; away[i].appearance.socks = alt; away[i].appearance.secondary = trim
+            }
+        }
+        let awayKit = away[0].appearance.primary
+        var awayIdent = lum(awayKit) < 60 ? away[0].appearance.secondary : awayKit
         if awayIdent == myKit.primary { awayIdent = 0xFFFFFF }
         let homeIdent = lum(myKit.primary) < 60 ? myKit.secondary : myKit.primary
         var spec = MatchSpec(home: home, away: away, homeName: store.p.name + " FC", awayName: oppName,
@@ -464,13 +474,16 @@ struct ShowcaseView: View {
                     }, spacing: 0.85)
                 } else if env["PANNA_SHOWCASE"] == "unique" {
                     let l = Catalog.prospect("luna")!, k = Catalog.prospect("kairo")!
-                    stage.setCharacters([(k.appearance, "Kairo", "kairo"), (l.appearance, "Luna", "luna"), (c, "Sora", nil)])
+                    var me = Appearance(); me.look = "l01"; me.primary = 0xFF3B5C; me.secondary = 0xFFFFFF; me.shorts = 0x16181F; me.socks = 0xFF3B5C
+                    stage.setCharacters([(k.appearance, "Kairo", "kairo"), (l.appearance, "Luna", "luna"), (me, "Me", nil)])
                 } else if env["PANNA_SHOWCASE"] == "prospects" {
                     stage.setCharacters(Catalog.prospects.prefix(6).map { ($0.appearance, $0.name, $0.model) }, spacing: 0.9)
                 } else if env["PANNA_SHOWCASE"] == "prospects2" {
                     stage.setCharacters(Catalog.prospects.dropFirst(6).map { ($0.appearance, $0.name, $0.model) }, spacing: 0.9)
-                } else if env["PANNA_SHOWCASE"] == "1" { stage.setCharacters([(a, "Malik")]) }
-                else { stage.setCharacters([(b, "Rex"), (a, "Malik"), (c, "Sora")]) }
+                } else {
+                    let ps = Catalog.prospects.prefix(3)
+                    stage.setCharacters(ps.map { ($0.appearance, $0.name, $0.model) })
+                }
                 switch env["PANNA_ANIM"] {
                 case "run": stage.animation = .run
                 case "celebrate": stage.animation = .celebrate

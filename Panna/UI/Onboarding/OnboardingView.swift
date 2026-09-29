@@ -171,7 +171,7 @@ struct TutorialCoach: View {
         ("SHOOT", "Hold SHOOT to charge — release in the GREEN for a perfect strike."),
         ("SKILL", "Tap SKILL near a defender. Go straight at them for a PANNA (nutmeg)."),
         ("DEFEND", "No ball? SHOOT becomes TACKLE, SKILL becomes SLIDE. Time it."),
-        ("FLOW", "Good football fills HYPE. When it's full, tap ⚡ for FLOW."),
+        ("FLOW", "Skills, pannas and goals fill your FLOW bar. When it's full, tap ⚡."),
     ]
 
     var body: some View {

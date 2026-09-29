@@ -56,53 +56,223 @@ for p in obj.data.polygons: p.use_smooth = True
 mn, mx = bbox(obj)
 print('UNIQUE mesh', n0, '->', len(obj.data.polygons), 'faces; bbox', tuple(mn), tuple(mx))
 
+# ------------------------------------------------------------------ face smoothing
+# The generator sculpts bumps where eyes/brows/mouth are drawn. Anime faces are smooth: relax the front of the
+# face so the painted features project cleanly instead of smearing over ridges and pits.
+Hh = mx.z - mn.z
+obj.data.calc_normals_split() if hasattr(obj.data, 'calc_normals_split') else None
+nbr = [[] for _ in obj.data.vertices]
+for e in obj.data.edges:
+    a, b = e.vertices; nbr[a].append(b); nbr[b].append(a)
+face_band = [v for v in obj.data.vertices if mn.z + 0.87 * Hh < v.co.z < mn.z + 0.95 * Hh]
+hw_face = sorted(abs(v.co.x) for v in face_band)[int(len(face_band) * 0.85)] if face_band else 0.1
+fw = {}
+for v in obj.data.vertices:
+    zf = (v.co.z - mn.z) / Hh
+    if not (0.85 < zf < 0.965): continue
+    if v.normal.y > -0.25: continue
+    wz = min(1.0, (zf - 0.85) / 0.02, (0.965 - zf) / 0.02)
+    wx = max(0.0, min(1.0, (hw_face * 0.85 - abs(v.co.x)) / (hw_face * 0.25)))
+    wn = min(1.0, (-v.normal.y - 0.25) / 0.3)
+    w = wz * wx * wn
+    if w > 0.01: fw[v.index] = w
+co = [v.co.copy() for v in obj.data.vertices]
+for _ in range(10):
+    nc = list(co)
+    for i, w in fw.items():
+        if nbr[i]:
+            avg = sum((co[j] for j in nbr[i]), Vector()) / len(nbr[i])
+            nc[i] = co[i] + (avg - co[i]) * 0.5 * w
+    co = nc
+for i in fw: obj.data.vertices[i].co = co[i]
+obj.data.update()
+print('UNIQUE face smoothed', len(fw), 'verts')
+
 # ------------------------------------------------------------------ UVs
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
 bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.004)
+# Faces and hair are what players look at: give head islands ~2.5x the texel density, then repack.
+bm_uv = bmesh.from_edit_mesh(obj.data)
+uvl = bm_uv.loops.layers.uv.verify()
+z_head = mn.z + 0.845 * (mx.z - mn.z)
+seen = set()
+for f in bm_uv.faces:
+    if f.index in seen: continue
+    # flood the UV island (faces sharing UV-coincident edges)
+    isl = [f]; seen.add(f.index); stack = [f]
+    while stack:
+        g = stack.pop()
+        for e in g.edges:
+            for h in e.link_faces:
+                if h.index in seen: continue
+                ok = True
+                for v in e.verts:
+                    a = next(l[uvl].uv for l in g.loops if l.vert == v)
+                    b = next(l[uvl].uv for l in h.loops if l.vert == v)
+                    if (a - b).length > 1e-5: ok = False; break
+                if ok: seen.add(h.index); isl.append(h); stack.append(h)
+    zc = sum(f_.calc_center_median().z for f_ in isl) / len(isl)
+    if zc > z_head:
+        loops = [l for f_ in isl for l in f_.loops]
+        c = sum((l[uvl].uv for l in loops), Vector((0, 0))) / len(loops)
+        for l in loops: l[uvl].uv = c + (l[uvl].uv - c) * 2.5
+bmesh.update_edit_mesh(obj.data)
+bpy.ops.uv.select_all(action='SELECT')
+bpy.ops.uv.pack_islands(rotate=True, margin=0.004)
 bpy.ops.object.mode_set(mode='OBJECT')
 
 # ------------------------------------------------------------------ views
-def load_view(path):
+def load_view(path, keep_face=False):
     img = bpy.data.images.load(os.path.abspath(path))
     w, h = img.size
     px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)  # bottom-up rows
     bg = np.median(np.concatenate([px[:8, :8, :3].reshape(-1, 3), px[-8:, -8:, :3].reshape(-1, 3), px[:8, -8:, :3].reshape(-1, 3)]), axis=0)
     diff = np.abs(px[:, :, :3] - bg).sum(axis=2)
-    mask = diff > 0.12
+    # Background = bg-coloured pixels connected to the image border. Enclosed pale areas (eye whites, silver
+    # hair, highlights) are figure even when they match the backdrop colour.
+    sim = diff <= 0.12
+    reach = np.zeros_like(sim)
+    reach[0, :] = sim[0, :]; reach[-1, :] = sim[-1, :]; reach[:, 0] = sim[:, 0]; reach[:, -1] = sim[:, -1]
+    def sweep(reach, axis):
+        s_ = sim if axis == 1 else sim.T
+        r_ = reach if axis == 1 else reach.T
+        run = np.cumsum(~s_, axis=1) + np.arange(s_.shape[0])[:, None] * (s_.shape[1] + 1)
+        ids = np.unique(run[r_ & s_])
+        out = s_ & np.isin(run, ids)
+        return out if axis == 1 else out.T
+    for _ in range(40):
+        nr = sweep(sweep(reach, 1), 0)
+        if (nr == reach).all(): break
+        reach = nr
+    mask = ~reach
     ys, xs = np.nonzero(mask)
-    # Erode: anti-aliased silhouette pixels are half background — drop them so they get refilled by dilation.
-    er = mask.copy()
-    for _ in range(3):
-        er &= np.roll(er, 1, 0) & np.roll(er, -1, 0) & np.roll(er, 1, 1) & np.roll(er, -1, 1)
-    fill_mask = er
+    def erode(m, n):
+        m = m.copy()
+        for _ in range(n): m &= np.roll(m, 1, 0) & np.roll(m, -1, 0) & np.roll(m, 1, 1) & np.roll(m, -1, 1)
+        return m
+    def dilate(m, n):
+        m = m.copy()
+        for _ in range(n): m |= np.roll(m, 1, 0) | np.roll(m, -1, 0) | np.roll(m, 1, 1) | np.roll(m, -1, 1)
+        return m
+    def box(a, r):
+        c = np.cumsum(np.cumsum(np.pad(a, ((r + 1, r), (r + 1, r)), mode='edge'), 0), 1)
+        k = 2 * r + 1
+        return (c[k:, k:] - c[:-k, k:] - c[k:, :-k] + c[:-k, :-k]) / (k * k)
+    # Strip line art: strokes clearly darker than their surroundings (outlines, muscle/fold lines) are drawing,
+    # not surface colour. Thick dark regions (hair, boots, eyes) stay. Anti-aliased fringes go with them.
+    lum = px[:, :, 0] * 0.3 + px[:, :, 1] * 0.59 + px[:, :, 2] * 0.11
+    ink = ((lum < 0.2) | (lum < box(lum, 6) - 0.08)) & mask
+    thick = dilate(erode(ink, 3), 3) & (lum < 0.2)
+    thin = dilate(ink & ~thick, 1)
+    if keep_face:
+        # Faces are line art: keep every stroke in the head (top ~17% of the figure).
+        ys_, xs_ = np.nonzero(mask)
+        top_row = ys_.max(); fig_h = ys_.max() - ys_.min()
+        head_rows = slice(int(top_row - 0.17 * fig_h), int(top_row) + 1)
+        thin[head_rows, :] = False
+    # Silhouette edges carry outline ink and background bleed: drop a 6px rim.
+    fill_mask = erode(mask, 6) & ~thin
     # rows are bottom-up: convert to top-down pixel coords
     top = h - 1 - ys.max(); bottom = h - 1 - ys.min()
     left = xs.min(); right = xs.max()
-    # Dilate figure colours outward so silhouette sampling never picks up background.
+    # Fill the holes and grow figure colours outward with a multi-scale normalised blur (no directional streaks).
     col = px.copy()
     m = fill_mask.copy()
-    for _ in range(40):
-        grown = m.copy()
-        acc = np.zeros_like(col[:, :, :3]); cnt = np.zeros(m.shape, dtype=np.float32)
-        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            sm = np.roll(m, (dy, dx), axis=(0, 1))
-            sc = np.roll(col[:, :, :3], (dy, dx), axis=(0, 1))
-            add = sm & ~m
-            acc[add] += sc[add]; cnt[add] += 1
-            grown |= sm
-        newp = grown & ~m
-        col[newp, :3] = acc[newp] / np.maximum(cnt[newp], 1)[:, None]
-        m = grown
+    for r in (1, 2, 3, 5, 8, 12, 20, 32, 48):
+        mf = m.astype(np.float32)
+        den = box(mf, r)
+        ok = (den > 1e-3) & ~m
+        for k in range(3):
+            num = box(col[:, :, k] * mf, r)
+            ch = col[:, :, k]; ch[ok] = num[ok] / den[ok]
+        m = m | ok
     img.pixels[:] = col.ravel()
     img.update()
+    view_px[os.path.abspath(path)] = col
     print('VIEW', os.path.basename(path), 'figure px x', left, right, 'y', top, bottom)
     return img, (float(w), float(h), float(left), float(right), float(top), float(bottom)), mask
 
 views = {}
+view_px = {}
 for k in ('front', 'back', 'left', 'right'):
     p = arg('--' + k)
-    if p: views[k] = load_view(p)
+    if p: views[k] = load_view(p, keep_face=(k != 'back'))
+
+def register_vertical(key):
+    """Refine vertical scale/offset of a front/back view by matching silhouette width profiles to the mesh."""
+    img, (w, h, l, r, t, b), mask = views[key]
+    hh = int(h)
+    rows_w = np.zeros(hh)
+    for row in range(hh):
+        idx = np.nonzero(mask[hh - 1 - row])[0]
+        if len(idx): rows_w[row] = idx.max() - idx.min()
+    zs = np.linspace(zmin, zmax, 240)
+    vx = np.array([v.co.x for v in obj.data.vertices]); vz = np.array([v.co.z for v in obj.data.vertices])
+    mesh_w = np.zeros(len(zs))
+    dz = (zmax - zmin) / 240
+    for i, z in enumerate(zs):
+        sel = vx[np.abs(vz - z) < dz]
+        if len(sel): mesh_w[i] = sel.max() - sel.min()
+    ppm0 = (b - t) / (zmax - zmin)
+    best = (1e18, ppm0, t)
+    for sc in np.linspace(0.9, 1.1, 41):
+        ppm = ppm0 * sc
+        for off in np.linspace(-0.06, 0.06, 49):
+            tt = t + off * (b - t)
+            rows = ((zmax - zs) * ppm + tt).astype(int)
+            ok = (rows >= 0) & (rows < hh)
+            if ok.sum() < 150: continue
+            diff = np.abs(rows_w[rows[ok]] - mesh_w[ok] * ppm)
+            cost = diff.mean()
+            if cost < best[0]: best = (cost, ppm, tt)
+    _, ppm, tt = best
+    nb = tt + ppm * (zmax - zmin)
+    print('REGISTER', key, 'scale', round(ppm / ppm0, 3), 'offset px', round(tt - t, 1))
+    views[key] = (img, (w, h, l, r, tt, nb), mask)
+
+head_map = {}
+def register_head(key, z0f=0.845):
+    """Heads rarely match the drawing's proportions: fit a separate x/z affine map for the head band by
+    matching the head silhouette (row extents) of the image to the mesh."""
+    img, (w, h, l, r, t, b), mask = views[key]
+    hh = int(h)
+    ext = np.full((hh, 2), np.nan)
+    for row in range(hh):
+        idx = np.nonzero(mask[hh - 1 - row])[0]
+        if len(idx): ext[row] = (idx.min(), idx.max())
+    z0 = zmin + z0f * (zmax - zmin)
+    vx = np.array([v.co.x for v in obj.data.vertices]); vz = np.array([v.co.z for v in obj.data.vertices])
+    zs = np.linspace(z0, zmax, 48); dz = (zmax - z0) / 48
+    mesh = []
+    for z in zs:
+        sel = vx[np.abs(vz - z) < dz * 0.75]
+        if len(sel) >= 2: mesh.append((z, sel.min(), sel.max()))
+    mesh = np.array(mesh)
+    ppm = (b - t) / (zmax - zmin)
+    sign = 1 if key == 'front' else -1
+    headpx = (zmax - z0) * ppm
+    best = None
+    for sz in np.linspace(0.88, 1.12, 25):
+        for off in np.linspace(-0.25, 0.25, 41):
+            D = -ppm * sz
+            C = t + zmax * ppm * sz + off * headpx
+            rows = np.round(C + D * mesh[:, 0]).astype(int)
+            ok = (rows >= 0) & (rows < hh)
+            ex = np.full((len(rows), 2), np.nan); ex[ok] = ext[rows[ok]]
+            good = ~np.isnan(ex[:, 0])
+            miss = (~good).sum()
+            if good.sum() < 10: continue
+            xm = np.concatenate([mesh[good, 1], mesh[good, 2]]) if sign > 0 else np.concatenate([mesh[good, 2], mesh[good, 1]])
+            ui = np.concatenate([ex[good, 0], ex[good, 1]])
+            Bm, Am = np.polyfit(xm, ui, 1)
+            if not (0.85 <= Bm / (sign * ppm) <= 1.2): continue
+            cost = np.abs(ui - (Am + Bm * xm)).mean() + miss * 3.0 + 25 * abs(off) + 25 * abs(sz - 1)
+            if best is None or cost < best[0]: best = (cost, Am, Bm, C, D, sz, off)
+    if best is None or os.environ.get('NO_HEADFIT'): return
+    cost, A, B, C, D, sz, off = best
+    head_map[key] = (float(A), float(B), float(C), float(D))
+    print('HEAD REGISTER', key, 'xscale', round(B / (sign * ppm), 3), 'zscale', round(sz, 3), 'zoff', round(off, 3), 'cost', round(cost, 2))
 
 def facing(mask, h, top, bottom):
     """+1 if the profile faces image-right, -1 if image-left (boots point forward past the calf)."""
@@ -154,6 +324,30 @@ def band_center_mesh(axis, f0, f1):
     vals = [getattr(v.co, axis) for v in obj.data.vertices if z0 <= v.co.z <= z1]
     return (min(vals) + max(vals)) / 2 if vals else 0.0
 
+# ------------------------------------------------------------------ per-vertex visibility (occlusion-aware projection)
+from mathutils.bvhtree import BVHTree
+bm_vis = bmesh.new(); bm_vis.from_mesh(obj.data); bm_vis.verts.ensure_lookup_table()
+bvh = BVHTree.FromBMesh(bm_vis)
+view_dirs = [Vector((0, -1, 0)), Vector((0, 1, 0)), Vector((-1, 0, 0)), Vector((1, 0, 0))]  # front, back, -X, +X
+vis_layer = obj.data.color_attributes.new(name='vis', type='FLOAT_COLOR', domain='POINT')
+vals = [[0.0, 0.0, 0.0, 0.0] for _ in obj.data.vertices]
+for c, d in enumerate(view_dirs):
+    for v in obj.data.vertices:
+        hit = bvh.ray_cast(v.co + v.normal * 0.004 + d * 0.002, d, 5.0)
+        vals[v.index][c] = 0.0 if hit[0] is not None else 1.0
+adj = [[] for _ in obj.data.vertices]
+for e in obj.data.edges:
+    a, b = e.vertices; adj[a].append(b); adj[b].append(a)
+for _ in range(2):
+    nv = [list(x) for x in vals]
+    for i, ns in enumerate(adj):
+        for c in range(4):
+            if vals[i][c] > 0 and any(vals[j][c] == 0 for j in ns): nv[i][c] = 0.3
+    vals = nv
+for i, v4 in enumerate(vals): vis_layer.data[i].color = v4
+bm_vis.free()
+print('UNIQUE visibility computed')
+
 # ------------------------------------------------------------------ projection material
 mat = bpy.data.materials.new('proj')
 mat.use_nodes = True
@@ -189,13 +383,25 @@ def projected_color(key):
     else:
         # Facing image-right: the front (-Y) is on the right → u grows as y falls.
         axis, sign = 'y', (-1 if dirs[key] > 0 else 1)
-    # Register on the torso band (hair/arms/feet sticking out don't skew the centre).
-    icx = band_center_img(mask, int(h), t, b, 0.58, 0.72)
-    c0 = band_center_mesh(axis, 0.58, 0.72)
+    # Register on the torso band (hair/arms/feet sticking out don't skew the centre); profiles only paint
+    # the head, so they register on the head band.
+    f0, f1 = (0.58, 0.72) if key in ('front', 'back') else HEAD_BAND
+    icx = band_center_img(mask, int(h), t, b, f0, f1)
+    c0 = band_center_mesh(axis, f0, f1)
     if icx is None: icx = (l + r) / 2
     print('ALIGN', key, 'img centre', icx, 'mesh centre', c0)
     upx = nop('ADD', nop('MULTIPLY', nop('SUBTRACT', P[axis], c0), sign * ppm), icx)
     vpx = nop('ADD', nop('MULTIPLY', nop('SUBTRACT', zmax, P['z']), ppm), t)
+    if key in head_map:
+        hA, hB, hC, hD = head_map[key]
+        hg = nodes.new('ShaderNodeMapRange'); hg.clamp = True
+        hg.inputs['From Min'].default_value = zmin + (HEAD_Z0 - 0.03) * (zmax - zmin)
+        hg.inputs['From Max'].default_value = zmin + HEAD_Z0 * (zmax - zmin)
+        links.new(P['z'], hg.inputs['Value'])
+        uh = nop('ADD', nop('MULTIPLY', P['x'], hB), hA)
+        vh = nop('ADD', nop('MULTIPLY', P['z'], hD), hC)
+        lerp = lambda a_, b_: nop('ADD', a_, nop('MULTIPLY', nop('SUBTRACT', b_, a_), hg.outputs[0]))
+        upx = lerp(upx, uh); vpx = lerp(vpx, vh)
     u = nop('DIVIDE', upx, w)
     v = nop('SUBTRACT', 1.0, nop('DIVIDE', vpx, h))
     comb = nodes.new('ShaderNodeCombineXYZ')
@@ -204,21 +410,148 @@ def projected_color(key):
     links.new(comb.outputs[0], tex.inputs[0])
     return tex.outputs['Color']
 
+HEAD_BAND = (0.87, 0.96)
+HEAD_Z0 = 0.845
+vis_node = None
+def vis_for_viewer(viewer):
+    """viewer: 'front' (-Y), 'back' (+Y), 'mx' (-X), 'px' (+X) -> per-vertex visibility socket."""
+    global vis_node
+    if vis_node is None:
+        va = nodes.new('ShaderNodeVertexColor'); va.layer_name = 'vis'
+        sep = nodes.new('ShaderNodeSeparateColor'); links.new(va.outputs['Color'], sep.inputs[0])
+        vis_node = (va, sep)
+    va, sep = vis_node
+    return {'front': sep.outputs[0], 'back': sep.outputs[1], 'mx': sep.outputs[2], 'px': va.outputs['Alpha']}[viewer]
+
 def weight(key):
     # A profile facing image-right is seen from the character's right side (viewer at -X), and vice versa.
     if key in ('front', 'back'):
-        comp, sign = 'y', (-1 if key == 'front' else 1)
+        comp, sign, viewer = 'y', (-1 if key == 'front' else 1), key
     else:
         comp, sign = 'x', (-1 if dirs[key] > 0 else 1)
+        viewer = 'mx' if dirs[key] > 0 else 'px'
+    side = key in ('left', 'right')
     base = nop('MAXIMUM', nop('MULTIPLY', Nn[comp], sign), 0.0)
-    w = nop('POWER', base, 4.0)
-    # Fronts/backs also cover upward/downward-facing surfaces a little.
-    if key in ('front', 'back'):
+    # Ignore grazing angles (stretch marks, silhouette line art), then sharpen.
+    ramp = nodes.new('ShaderNodeMapRange'); ramp.clamp = True
+    ramp.inputs['From Min'].default_value = 0.8 if side else 0.22
+    ramp.inputs['From Max'].default_value = 0.95 if side else 0.85
+    links.new(base, ramp.inputs['Value'])
+    w = nop('POWER', ramp.outputs[0], 2.0)
+    # Only paint what this view can actually see (no ghost limbs on the torso).
+    w = nop('MULTIPLY', w, vis_for_viewer(viewer))
+    if side:
+        # Profiles only paint the head: below the neck, arms overlap the torso in a side view (ghost limbs).
+        gate = nodes.new('ShaderNodeMapRange'); gate.clamp = True
+        gate.inputs['From Min'].default_value = zmin + (HEAD_Z0 - 0.015) * (zmax - zmin)
+        gate.inputs['From Max'].default_value = zmin + (HEAD_Z0 + 0.015) * (zmax - zmin)
+        links.new(P['z'], gate.inputs['Value'])
+        w = nop('MULTIPLY', w, gate.outputs[0])
+    if not side:
         w = nop('ADD', w, nop('MULTIPLY', nop('ABSOLUTE', Nn['z']), 0.08))
-    return nop('ADD', w, 0.0005)
+    if key == 'front':
+        # The face is line art drawn from the front: any surface on the front of the head (eye sockets, brow
+        # ridges, cheeks) takes the front drawing, whatever its normal or occlusion.
+        fg = nodes.new('ShaderNodeMapRange'); fg.clamp = True
+        fg.inputs['From Min'].default_value = zmin + (HEAD_Z0 - 0.01) * (zmax - zmin)
+        fg.inputs['From Max'].default_value = zmin + (HEAD_Z0 + 0.01) * (zmax - zmin)
+        links.new(P['z'], fg.inputs['Value'])
+        hemi = nodes.new('ShaderNodeMapRange'); hemi.clamp = True
+        hemi.inputs['From Min'].default_value = 0.0; hemi.inputs['From Max'].default_value = -0.25
+        links.new(Nn['y'], hemi.inputs['Value'])
+        w = nop('MAXIMUM', w, nop('MULTIPLY', nop('MULTIPLY', fg.outputs[0], hemi.outputs[0]), 3.0))
+    return w
+
+for k in ('front', 'back'):
+    if k in views: register_vertical(k); register_head(k)
+
+# ---- vertex colours: sample front/back where confidently seen, flood-fill the rest across the mesh.
+def t_of(view): return view[1][4]
+
+def view_map(key):
+    img, (w, h, l, r, t, b), mask = views[key]
+    ppm = (b - t) / (zmax - zmin)
+    icx = band_center_img(mask, int(h), t, b, 0.58, 0.72) or (l + r) / 2
+    c0 = band_center_mesh('x', 0.58, 0.72)
+    sign = 1 if key == 'front' else -1
+    return img, w, h, ppm, icx, c0, sign
+vcol = [None] * len(obj.data.vertices)
+vconf = [0.0] * len(obj.data.vertices)
+vis_data = obj.data.color_attributes['vis'].data
+for key, ch, ny in (('front', 0, -1), ('back', 1, 1)):
+    if key not in views: continue
+    img, w, h, ppm, icx, c0, sign = view_map(key)
+    px = view_px[os.path.abspath(arg('--' + key))]
+    H_, W_ = px.shape[0], px.shape[1]
+    for v in obj.data.vertices:
+        facing = v.normal.y * ny
+        vis = vis_data[v.index].color[ch]
+        conf = max(0.0, min(1.0, (facing - 0.2) / 0.5)) * vis
+        if key == 'front' and v.co.z > zmin + HEAD_Z0 * (zmax - zmin) and facing > 0:
+            conf = max(conf, 0.9)
+        if conf <= 0.05: continue
+        u = (v.co.x - c0) * sign * ppm + icx
+        row_td = (zmax - v.co.z) * ppm + t_of(views[key])
+        if key in head_map:
+            hA, hB, hC, hD = head_map[key]
+            g = max(0.0, min(1.0, (v.co.z - (zmin + (HEAD_Z0 - 0.03) * (zmax - zmin))) / (0.03 * (zmax - zmin))))
+            u += (hA + hB * v.co.x - u) * g
+            row_td += (hC + hD * v.co.z - row_td) * g
+        xi = int(max(0, min(W_ - 1, u))); yi = int(max(0, min(H_ - 1, H_ - 1 - row_td)))
+        c = px[yi, xi, :3]
+        if conf > vconf[v.index]:
+            vconf[v.index] = conf; vcol[v.index] = (float(c[0]), float(c[1]), float(c[2]))
+head_z0 = zmin + HEAD_Z0 * (zmax - zmin)
+for key in [k for k in ('left', 'right') if k in views]:
+    img, (w, h, l, r, t, b), mask = views[key]
+    ppm = (b - t) / (zmax - zmin)
+    sgn = -1 if dirs[key] > 0 else 1
+    icx = band_center_img(mask, int(h), t, b, *HEAD_BAND) or (l + r) / 2
+    c0 = band_center_mesh('y', *HEAD_BAND)
+    nx = -1 if dirs[key] > 0 else 1
+    ch = 2 if dirs[key] > 0 else 3
+    px = view_px[os.path.abspath(arg('--' + key))]
+    H_, W_ = px.shape[0], px.shape[1]
+    for v in obj.data.vertices:
+        if v.co.z < head_z0: continue
+        facing = v.normal.x * nx
+        vis = vis_data[v.index].color[ch]
+        conf = max(0.0, min(1.0, (facing - 0.75) / 0.2)) * vis
+        if conf <= 0.05: continue
+        u = (v.co.y - c0) * sgn * ppm + icx
+        row_td = (zmax - v.co.z) * ppm + t
+        xi = int(max(0, min(W_ - 1, u))); yi = int(max(0, min(H_ - 1, H_ - 1 - row_td)))
+        c = px[yi, xi, :3]
+        if conf > vconf[v.index]:
+            vconf[v.index] = conf; vcol[v.index] = (float(c[0]), float(c[1]), float(c[2]))
+# Flood fill uncoloured vertices from coloured neighbours (breadth-first, averaging).
+frontier = [i for i, c in enumerate(vcol) if c is not None]
+filled = 0
+while True:
+    nxt = {}
+    for i, c in enumerate(vcol):
+        if c is not None: continue
+        ns = [vcol[j] for j in adj[i] if vcol[j] is not None]
+        if ns: nxt[i] = tuple(sum(x[k] for x in ns) / len(ns) for k in range(3))
+    if not nxt: break
+    for i, c in nxt.items(): vcol[i] = c
+    filled += len(nxt)
+for i in range(len(vcol)):
+    if vcol[i] is None: vcol[i] = (0.5, 0.5, 0.5)
+# A couple of smoothing passes on the filled (low-confidence) vertices only.
+for _ in range(3):
+    nv = list(vcol)
+    for i in range(len(vcol)):
+        if vconf[i] < 0.3 and adj[i]:
+            ns = [vcol[j] for j in adj[i]] + [vcol[i]]
+            nv[i] = tuple(sum(x[k] for x in ns) / len(ns) for k in range(3))
+    vcol = nv
+vc_layer = obj.data.color_attributes.new(name='vcol', type='FLOAT_COLOR', domain='POINT')
+for i, c in enumerate(vcol): vc_layer.data[i].color = (c[0], c[1], c[2], vconf[i])
+print('UNIQUE vertex colours: filled', filled, 'of', len(vcol))
 
 cols, ws = [], []
-for k in views:
+for k in [k for k in views if k in ('front', 'back', 'left', 'right')]:
     cols.append(projected_color(k)); ws.append(weight(k))
 wsum = ws[0]
 for w in ws[1:]: wsum = nop('ADD', wsum, w)
@@ -231,7 +564,13 @@ for c, w in zip(cols, ws):
     else:
         add = nodes.new('ShaderNodeVectorMath'); add.operation = 'ADD'
         links.new(acc, add.inputs[0]); links.new(mix.outputs[0], add.inputs[1]); acc = add.outputs[0]
-links.new(acc, emit.inputs['Color'])
+vc = nodes.new('ShaderNodeVertexColor'); vc.layer_name = 'vcol'
+conf = nop('MINIMUM', nop('MULTIPLY', wsum, 1.6), 1.0)
+mixn = nodes.new('ShaderNodeMix'); mixn.data_type = 'RGBA'
+links.new(conf, mixn.inputs['Factor'])
+links.new(vc.outputs['Color'], mixn.inputs['A'])
+links.new(acc, mixn.inputs['B'])
+links.new(mixn.outputs['Result'], emit.inputs['Color'])
 bake_img = bpy.data.images.new('bake', TEX, TEX, alpha=False)
 bake_node = nodes.new('ShaderNodeTexImage'); bake_node.image = bake_img
 nodes.active = bake_node
@@ -247,6 +586,7 @@ tex_path = os.path.join(ROOT, 'Panna', 'Resources', 'Characters', NAME + '.png')
 bake_img.filepath_raw = tex_path
 bake_img.file_format = 'PNG'
 bake_img.save()
+bake_img.pack()
 # Ship as JPEG (10x smaller than PNG, no visible loss for painted art).
 import subprocess
 jpg = tex_path[:-4] + '.jpg'
@@ -307,6 +647,27 @@ for s, side in ((1, 'L'), (-1, 'R')):
 bpy.ops.object.mode_set(mode='OBJECT')
 bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); ro.select_set(True); bpy.context.view_layer.objects.active = ro
 bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+# Smooth skin weights so cloth (shorts, sleeves) bends softly instead of ballooning at the joints.
+bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+bpy.ops.object.vertex_group_smooth(group_select_mode='ALL', factor=0.6, repeat=6, expand=0.0)
+bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
+bpy.ops.object.mode_set(mode='OBJECT')
+# Pelvis/shorts: blend thighs toward hips so leg swings don't drag the shorts outward.
+hg = obj.vertex_groups.get('hips')
+if hg:
+    for v in obj.data.vertices:
+        z = v.co.z
+        if mn.z + 0.42 * H < z < mn.z + 0.56 * H:
+            for g in v.groups:
+                name = obj.vertex_groups[g.group].name
+                if name.startswith('thigh.') and abs(v.co.x) < 0.09 * H:
+                    t = (z - (mn.z + 0.42 * H)) / (0.14 * H)
+                    moved = g.weight * min(0.8, t)
+                    g.weight -= moved
+                    hg.add([v.index], moved, 'ADD')
+    bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
 unweighted = sum(1 for v in obj.data.vertices if sum(g.weight for g in v.groups) < 0.01)
 print('UNIQUE rig unweighted verts', unweighted, 'of', len(obj.data.vertices))
 # Anything left unweighted snaps to the nearest bone head.
@@ -316,6 +677,43 @@ if unweighted:
         if sum(g.weight for g in v.groups) < 0.01:
             nm = min(heads, key=lambda h: (h[1] - v.co).length)[0]
             obj.vertex_groups[nm].add([v.index], 1.0, 'REPLACE')
+
+# ------------------------------------------------------------------ kit region mask (clothing zone from the skeleton)
+kit_bones = {'hips', 'spine', 'chest', 'thigh.L', 'thigh.R', 'shin.L', 'shin.R', 'upperarm.L', 'upperarm.R'}
+gname = {g.index: g.name for g in obj.vertex_groups}
+km = obj.data.color_attributes.new(name='kitmask', type='FLOAT_COLOR', domain='POINT')
+neck_z = mn.z + 0.86 * H
+for v in obj.data.vertices:
+    tot = sum(g.weight for g in v.groups) or 1
+    hw = sum(g.weight for g in v.groups if gname.get(g.group) in ('head', 'neck')) / tot
+    aw = sum(g.weight for g in v.groups if gname.get(g.group, '').startswith(('forearm', 'hand'))) / tot
+    val = 1.0 - min(1.0, max(0.0, (hw - 0.35) / 0.3))
+    # Below the collarbone it is always shirt (the neck bone's weights reach the upper chest).
+    zf = (v.co.z - mn.z) / H
+    if zf < 0.79: val = 1.0
+    elif zf < 0.81: val = max(val, (0.81 - zf) / 0.02)
+    if abs(v.co.x) > torso_hw * 1.1: val *= 1.0 - min(1.0, max(0.0, (aw - 0.4) / 0.3))
+    if v.co.z > neck_z: val = 0.0
+    elif v.co.z > neck_z - 0.02 * H: val *= (neck_z - v.co.z) / (0.02 * H)
+    km.data[v.index].color = (val, val, val, 1)
+mm = bpy.data.materials.new('maskbake'); mm.use_nodes = True
+mt = mm.node_tree; mt.nodes.clear()
+mo = mt.nodes.new('ShaderNodeOutputMaterial'); me_ = mt.nodes.new('ShaderNodeEmission'); vcn = mt.nodes.new('ShaderNodeVertexColor'); vcn.layer_name = 'kitmask'
+mt.links.new(vcn.outputs['Color'], me_.inputs['Color']); mt.links.new(me_.outputs[0], mo.inputs['Surface'])
+mimg = bpy.data.images.new('maskimg', 1024, 1024, alpha=False)
+mnode = mt.nodes.new('ShaderNodeTexImage'); mnode.image = mimg; mt.nodes.active = mnode
+saved_mats = list(obj.data.materials)
+obj.data.materials.clear(); obj.data.materials.append(mm)
+bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+scene.render.bake.margin = 6
+bpy.ops.object.bake(type='EMIT')
+mask_path = os.path.join(ROOT, 'Panna', 'Resources', 'Characters', NAME + '_mask.png')
+mimg.filepath_raw = mask_path; mimg.file_format = 'PNG'; mimg.save()
+import subprocess
+subprocess.run(['sips', '-s', 'format', 'png', '-m', '/System/Library/ColorSync/Profiles/Generic Gray Profile.icc', mask_path], capture_output=True)
+obj.data.materials.clear()
+for m_ in saved_mats: obj.data.materials.append(m_)
+print('UNIQUE kit mask', mask_path)
 
 # ------------------------------------------------------------------ export (same binary format as base.bin)
 C = Matrix(((1, 0, 0, 0), (0, 0, 1, 0), (0, -1, 0, 0), (0, 0, 0, 1)))
@@ -387,4 +785,13 @@ if '--preview' in A:
         cam.location = (math.sin(a) * 6, -math.cos(a) * 6, mn.z + H * 0.52)
         cam.rotation_euler = (math.radians(90), 0, a)
         scene.render.filepath = os.path.join(ROOT, 'art', 'ai3d', f'{NAME}_proj_{nm}.png')
+        bpy.ops.render.render(write_still=True)
+    # Head close-ups at full texture resolution (what the locker / pack reveal camera sees).
+    cd.ortho_scale = H * 0.2
+    scene.render.resolution_x, scene.render.resolution_y = 600, 600
+    for nm, deg in (('front', 0), ('34', 40), ('side', 90)):
+        a = math.radians(deg)
+        cam.location = (math.sin(a) * 6, -math.cos(a) * 6, mn.z + H * 0.91)
+        cam.rotation_euler = (math.radians(90), 0, a)
+        scene.render.filepath = os.path.join(ROOT, 'art', 'ai3d', f'{NAME}_head_{nm}.png')
         bpy.ops.render.render(write_still=True)

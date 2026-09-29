@@ -21,6 +21,7 @@ public final class MatchSim {
     var prevSafe = V3(0, BallState.radius, 0)
     var disabledPlayers: Set<Int> = []
     var realTime: Float = 0   // never frozen, used for timing windows
+    var supportRunner: [Int] = [-1, -1]   // per team: which supporting bot plays the forward runner
 
     public init(home: TeamSetup, away: TeamSetup, rules: MatchRules = MatchRules(), seed: UInt64 = 1) {
         self.rules = rules
@@ -129,6 +130,7 @@ public final class MatchSim {
         state.ball = BallState()
         state.ball.pos = V3(0, BallState.radius, 0)
         for i in brains.indices { brains[i] = AIBrain() }
+        supportRunner = [-1, -1]
         keeperBrains = [KeeperBrain(), KeeperBrain()]
         emit(.kickoff(team: team))
     }
@@ -338,7 +340,7 @@ public final class MatchSim {
             let toBall = xz(b.pos) - p.pos
             let dBall = length(toBall)
             if pressed.contains(.shoot) {
-                if b.owner < 0 && dBall < 1.7 && b.pos.y > 0.75 && b.pos.y < 2.7 {
+                if b.owner < 0 && dBall < 1.7 && b.pos.y > 0.75 && b.pos.y < 2.7 && p.touchCooldown <= 0 {
                     volley(i, aim: f.aim)
                 } else if b.owner < 0 && dBall < 1.3 && b.pos.y <= 0.75 && p.touchCooldown <= 0 {
                     // First-time finish on a loose ball.
@@ -761,7 +763,15 @@ public final class MatchSim {
         let s = geo.attackSign(team: p.team)
         var best = -1
         var bestScore: Float = -99
-        for m in state.players where m.team == p.team && m.id != i && !(m.isKeeper && forceTarget == nil) && !disabledPlayers.contains(m.id) {
+        // A bot already chose its receiver (with lead and lane checks): honour it instead of re-guessing from the cone.
+        var forceTarget = forceTarget
+        if forceTarget == nil && !p.isHuman && !p.isKeeper {
+            let t = brains[i].passTarget
+            if t >= 0 && t != i && state.players[t].team == p.team && !state.players[t].isKeeper && !disabledPlayers.contains(t) { forceTarget = t }
+        }
+        brains[i].passTarget = -1
+        // Outfield players never pick their own keeper as a target (no back-passes to the keeper's hands).
+        for m in state.players where m.team == p.team && m.id != i && !m.isKeeper && !disabledPlayers.contains(m.id) {
             let to = m.pos - p.pos
             let d = length(to)
             if d < 1.5 { continue }
@@ -780,24 +790,15 @@ public final class MatchSim {
         let vision = p.inFlow && p.loadout.playstyle == .maestro
         if best >= 0 {
             let m = state.players[best]
-            var tp = m.pos
-            speed = lofted ? 0 : clampf(12.5 + length(m.pos - p.pos) * 0.45, 14, 21) * (0.92 + p.stats.passing * 0.12)
-            if vision { speed *= 1.25 }
-            if oneTouch && p.loadout.trait == .tikiTaka { speed *= 1.15 }
-            speed *= mods(p).passSpeed
-            // Lead the receiver.
-            for _ in 0..<2 {
-                let t = lofted ? 0.55 + length(tp - p.pos) / 24 : length(tp - p.pos) / max(speed, 1) * 1.15
-                tp = m.pos + m.vel * t * (lofted ? 1.0 : 0.85)
-                if lofted { tp += normalized(m.vel) * 1.2 }
-            }
-            geo.resolve(&tp, radius: 0.8, walls: geo.playerWalls)
-            targetPos = tp
+            // Lead the receiver and weight the pass so it arrives at a controllable pace.
+            let plan = passPlan(from: p, to: m, lofted: lofted, oneTouch: oneTouch)
+            speed = lofted ? 0 : plan.speed
+            targetPos = plan.target
             b.intendedReceiver = best
         } else {
             targetPos = p.pos + prefer * (lofted ? 15 : 11)
             geo.resolve(&targetPos, radius: 0.8, walls: geo.playerWalls)
-            speed = 15
+            speed = 14
             b.intendedReceiver = -1
         }
         var errAng = (1 - p.stats.passing) * 0.06
@@ -825,7 +826,9 @@ public final class MatchSim {
         }
         b.owner = -1
         b.wobble = 0
-        b.pos = V3(p.pos.x + p.facingDir.x * 0.45, BallState.radius, p.pos.y + p.facingDir.y * 0.45)
+        // The ball leaves in the direction it is played (a pass back over the shoulder doesn't start in front of you).
+        let spawn = normalized(V2(b.vel.x, b.vel.z))
+        b.pos = V3(p.pos.x + spawn.x * 0.45, BallState.radius, p.pos.y + spawn.y * 0.45)
         b.isShot = false
         b.passFrom = i
         b.passTime = realTime
@@ -1241,8 +1244,12 @@ public final class MatchSim {
         let bv = V2(b.vel.x, b.vel.z)
         var bestI = -1
         var bestD: Float = 99
+        // A pass on its way to a teammate belongs to that teammate: other bots on the team let it run.
+        let live = liveMatePass()
+        let liveTeam = live >= 0 ? state.players[live].team : -1
         for p in state.players where !p.isKeeper && !disabledPlayers.contains(p.id) {
             if p.busy || p.touchCooldown > 0 || p.id == b.ignorePlayer { continue }
+            if live >= 0 && p.id != live && p.team == liveTeam && !p.isHuman { continue }
             if p.action == .tackle && p.actionT < 0.28 { continue }
             let d = length(bp - p.pos)
             let rad = pickupRadius(p)
@@ -1250,7 +1257,7 @@ public final class MatchSim {
             let maxH: Float = lengthSq(bv) < 100 ? 1.35 : 1.0
             if b.pos.y > maxH { continue }
             let rel = length(bv - p.vel)
-            let limit: Float = p.isHuman ? 16 : 13
+            let limit: Float = p.isHuman ? 16 : 14
             if rel > limit {
                 // Too hot to control: body block / deflection.
                 if d < 0.6 && b.pos.y < 1.9 {
@@ -1338,6 +1345,9 @@ public final class MatchSim {
         let goalX = -s * L
         let bp = xz(b.pos)
         let skill = keeperOf(team: p.team).stats.defending
+        // Back-pass rule: a ball a teammate deliberately played (and nobody else touched since) can't be handled.
+        let backPass = b.owner < 0 && b.passFrom >= 0 && b.passFrom != i && b.lastTouch == b.passFrom
+            && state.players[b.passFrom].team == p.team
 
         // Holding the ball: distribute.
         if b.owner == i {
@@ -1345,15 +1355,19 @@ public final class MatchSim {
             kb.sprint = false
             kb.holdT += dt
             if kb.holdT > 0.9 {
-                kb.holdT = 0
-                // Find the most open teammate.
-                var best = -1; var bestScore: Float = -99
-                for m in state.players where m.team == p.team && !m.isKeeper && !disabledPlayers.contains(m.id) {
+                // Find the most open teammate the throw will actually reach (same race model the bots use).
+                var best = -1; var bestScore: Float = -99; var bestSafety: Float = 0
+                for m in state.players where m.team == p.team && !m.isKeeper && !disabledPlayers.contains(m.id) && !m.busy {
                     var nearest: Float = 99
                     for o in state.players where o.team != p.team { nearest = min(nearest, length(o.pos - m.pos)) }
-                    let sc = nearest + (m.isHuman ? 1.5 : 0) + laneOpenness(from: p.pos, to: m.pos, team: p.team) * 3
-                    if sc > bestScore { bestScore = sc; best = m.id }
+                    let plan = passPlan(from: p, to: m, lofted: false)
+                    let safety = passSafety(from: p.pos, to: plan.target, time: plan.time, team: p.team, lofted: false)
+                    let wanted: Float = m.isHuman && (humanActive(m) || m.callT > 0) ? 1.5 : 0
+                    let sc = min(nearest, 6) + wanted + safety * 5 + clampf((m.pos.x - p.pos.x) * s / 10, 0, 1)
+                    if sc > bestScore { bestScore = sc; best = m.id; bestSafety = safety }
                 }
+                // Nobody free yet: hold on a little longer (up to ~3 s) rather than throw it to the opposition.
+                if bestSafety < 0.35 && kb.holdT < 3 { best = -1 } else { kb.holdT = 0 }
                 if best >= 0 {
                     state.players[i] = p
                     keeperBrains[p.team] = kb
@@ -1370,6 +1384,38 @@ public final class MatchSim {
             return
         }
         kb.holdT = 0
+        kb.smotherCD = max(0, kb.smotherCD - dt)
+
+        // Smother at the feet: a dribbler who walks into the keeper's reach can lose it.
+        // A skill move's i-frames (rounding the keeper) beats the dive.
+        if b.owner >= 0 && kb.smotherCD <= 0 && p.action == .none && p.touchCooldown <= 0 {
+            let c = state.players[b.owner]
+            if c.team != p.team && !c.isKeeper && length(bp - p.pos) < 1.05 {
+                kb.smotherCD = 0.7
+                if c.iFrames > 0 {
+                    p.action = .stumble; p.actionT = 0; p.actionDur = 0.6
+                    emit(.ankles(attacker: c.id, victim: i))
+                    addHype(c.id, .ankles, 14)
+                } else if rng.chance(0.4 + skill * 0.35 - c.stats.control * 0.25) {
+                    state.players[i] = p
+                    keeperBrains[p.team] = kb
+                    state.players[c.id].action = .stumble; state.players[c.id].actionT = 0; state.players[c.id].actionDur = 0.4
+                    state.players[c.id].shotCharge = -1; state.players[c.id].passHeld = -1
+                    state.ball.owner = i
+                    state.ball.lastTouch = i
+                    state.ball.passFrom = -1
+                    state.ball.prevTouchSameTeam = -1
+                    state.ball.isShot = false
+                    state.players[i].action = .keeperHold
+                    state.players[i].actionT = 0
+                    state.players[i].actionDur = 0.5
+                    state.players[i].saves += 1
+                    emit(.save(keeper: i, caught: true))
+                    emit(.possession(player: i))
+                    return
+                }
+            }
+        }
 
         // Shot threat detection.
         let hv = V2(b.vel.x, b.vel.z)
@@ -1427,7 +1473,7 @@ public final class MatchSim {
             var target = goal + normalized(toBall) * depth
             target.y = clampf(target.y, -geo.shape.goalHalfWidth + 0.2, geo.shape.goalHalfWidth - 0.2)
             // Claim a loose ball in the box.
-            if b.owner < 0 && dist < 6 && length(hv) < 9 && b.pos.y < 2.2 {
+            if b.owner < 0 && dist < 6 && length(hv) < 9 && b.pos.y < 2.2 && !backPass {
                 target = bp
                 kb.sprint = true
             } else { kb.sprint = length(target - p.pos) > 2 }
@@ -1447,6 +1493,25 @@ public final class MatchSim {
         guard dxz < reach && b.pos.y < maxH else { return }
         let speed = length(b.vel)
         let wasShot = b.isShot && b.shotBy >= 0 && state.players[b.shotBy].team != p.team
+        if backPass {
+            // No hands. Only stop it if it is actually going in: a first-time clearance with the feet, upfield and wide.
+            let tg = abs(b.vel.x) > 0.1 ? (goalX - b.pos.x) / b.vel.x : -1
+            let zAt = b.pos.z + b.vel.z * max(tg, 0)
+            guard tg > 0 && tg < 1.5 && abs(zAt) < geo.shape.goalHalfWidth + 0.3 else { return }
+            var nb = state.ball
+            let side: Float = p.pos.y >= 0 ? 1 : -1
+            let out = normalized(V2(s, side * 0.8)) * 11
+            nb.vel = V3(out.x, 2.0, out.y)
+            nb.spin = 0; nb.wobble = 0
+            nb.isShot = false
+            nb.lastTouch = i
+            nb.passFrom = -1
+            nb.intendedReceiver = -1
+            state.ball = nb
+            state.players[i].touchCooldown = 0.5
+            emit(.kick(player: i, power: 0.5, lofted: true))
+            return
+        }
         if speed < 14 || (!diving && speed < 19 && dxz < 0.6) {
             // Catch.
             if wasShot { state.players[i].saves += 1; emit(.save(keeper: i, caught: true)) }
@@ -1464,8 +1529,9 @@ public final class MatchSim {
             // Parry wide.
             var nb = state.ball
             let side: Float = nb.pos.z >= p.pos.y ? 1 : -1
-            let out = V2(s * (4 + rng.range(0, 3)), side * (5 + rng.range(0, 5)))
-            nb.vel = V3(out.x, 2.5 + rng.range(0, 2.5), out.y)
+            // Parry away from danger: wide toward the flank rather than back into the six-yard scramble.
+            let out = V2(s * (3 + rng.range(0, 3)), side * (8 + rng.range(0, 4)))
+            nb.vel = V3(out.x, 3.5 + rng.range(0, 2), out.y)
             nb.spin = 0; nb.wobble = 0
             nb.isShot = false
             nb.lastTouch = i
@@ -1484,4 +1550,5 @@ struct KeeperBrain {
     var threatT: Float = 0
     var reacted = false
     var holdT: Float = 0
+    var smotherCD: Float = 0
 }
