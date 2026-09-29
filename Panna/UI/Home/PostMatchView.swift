@@ -28,6 +28,15 @@ struct PostMatchView: View {
                 .frame(width: 300)
                 VStack(alignment: .leading, spacing: 10) {
                     if let r {
+                        if case .moment(let mid) = r.mode, let mo = Moments.moment(mid) {
+                            let st = app.momentResult?.stars ?? 0
+                            HStack(spacing: 10) {
+                                Text(st > 0 ? "MOMENT COMPLETE" : "NOT THIS TIME").font(.display(30)).foregroundStyle(st > 0 ? Theme.cyan : Theme.pink)
+                                ForEach(0..<3) { i in Image(systemName: i < st ? "star.fill" : "star").font(.system(size: 22)).foregroundStyle(Theme.gold) }
+                            }
+                            Text(mo.title + (app.momentResult.map { $0.gems > 0 ? "  ·  +\($0.gems) GEMS" : "" } ?? "")).font(.label(13, .black)).foregroundStyle(.white.opacity(0.8))
+                        }
+                        if !isMoment(r) {
                         HStack(alignment: .firstTextBaseline, spacing: 14) {
                             Text(r.won ? "VICTORY" : (r.draw ? "DRAW" : "DEFEAT"))
                                 .font(.display(50))
@@ -37,6 +46,7 @@ struct PostMatchView: View {
                             if w.streak >= 2 {
                                 Label("\(w.streak) WIN STREAK", systemImage: "flame.fill").font(.label(12, .black)).foregroundStyle(.orange)
                             }
+                        }
                         }
                         // Stat line.
                         HStack(spacing: 14) {
@@ -138,12 +148,15 @@ struct PostMatchView: View {
         }
     }
 
+    func isMoment(_ r: MatchReport) -> Bool { if case .moment = r.mode { return true }; return false }
+
     var primaryTitle: String {
         if case .selection = app.lastReport?.mode {
             if store.p.selection?.over == true { return "RUN SUMMARY" }
             return app.lastReport?.won == true ? "DEVOUR AN EGO" : "BACK TO THE RUN"
         }
         if case .career = app.lastReport?.mode { return app.lastReport?.won == true ? "NEXT MATCH" : "TRY AGAIN" }
+        if case .moment = app.lastReport?.mode { return (app.momentResult?.stars ?? 0) == 3 ? "PLAY AGAIN" : "RETRY" }
         return "PLAY AGAIN"
     }
 

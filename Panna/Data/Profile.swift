@@ -82,7 +82,7 @@ struct Quest: Codable, Identifiable, Hashable {
 // MARK: - Match report
 
 enum MatchMode: Codable, Hashable {
-    case quick, career(stage: String), ranked, coop, friendly, tutorial, online(OnlineMode), selection
+    case quick, career(stage: String), ranked, coop, friendly, tutorial, online(OnlineMode), selection, moment(String)
 }
 
 struct MatchReport {
@@ -178,6 +178,7 @@ struct Profile: Codable {
     var selectionRuns = 0
     var passXP = 0
     var lookMigrated = false
+    var momentStars: [String: Int] = [:]
     var passClaimed: Set<Int> = []
 
     // MARK: Derived
@@ -247,11 +248,11 @@ final class ProfileStore: ObservableObject {
         Telemetry.log("save", ["level": p.level])
     }
 
-    static func stableSeed(_ s: String) -> UInt64 {
+    nonisolated static func stableSeed(_ s: String) -> UInt64 {
         s.unicodeScalars.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1.value)) &* 1099511628211 }
     }
 
-    static var today: String {
+    nonisolated static var today: String {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
         return f.string(from: Date())
     }

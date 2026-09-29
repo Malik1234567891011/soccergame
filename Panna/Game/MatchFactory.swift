@@ -38,7 +38,9 @@ enum MatchFactory {
         home.mods = spec.homeMods
         let away = teamSetup(spec.away, name: spec.awayName, color: spec.awayColor, ai: spec.awayAISkill, keeper: spec.keeperSkill[1])
         let sim = MatchSim(home: home, away: away, rules: spec.rules, seed: spec.seed)
-        return controller(driver: OfflineDriver(sim: sim, localPlayer: spec.humanId), spec: spec)
+        let c = controller(driver: OfflineDriver(sim: sim, localPlayer: spec.humanId), spec: spec)
+        c.duration = spec.rules.duration
+        return c
     }
 
     @MainActor

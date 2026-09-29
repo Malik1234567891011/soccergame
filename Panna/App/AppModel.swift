@@ -2,7 +2,7 @@ import SwiftUI
 import PannaCore
 
 enum Screen: Hashable {
-    case home, locker, squad, scout, career, profile, match, postMatch, onboarding, online, showcase, shop, selection
+    case home, locker, squad, scout, career, profile, match, postMatch, onboarding, online, showcase, shop, selection, moments
 }
 
 struct PendingMatch {
@@ -34,7 +34,7 @@ final class AppModel: ObservableObject {
         if env["PANNA_SHOWCASE"] != nil { screen = .showcase; return }
         if let s = env["PANNA_SCREEN"] {
             store.p.onboarded = true; store.p.tutorialDone = true
-            screen = ["locker": .locker, "squad": .squad, "scout": .scout, "career": .career, "profile": .profile, "shop": .shop, "online": .online, "onboarding": .onboarding, "selection": .selection][s] ?? .home
+            screen = ["locker": .locker, "squad": .squad, "scout": .scout, "career": .career, "profile": .profile, "shop": .shop, "online": .online, "onboarding": .onboarding, "selection": .selection, "moments": .moments][s] ?? .home
         }
         if env["PANNA_QUICK"] != nil {
             store.p.onboarded = true; store.p.tutorialDone = true
@@ -183,6 +183,34 @@ final class AppModel: ObservableObject {
         go(.match)
     }
 
+    // MARK: - Moments
+
+    var momentResult: (stars: Int, gems: Int)?
+
+    func playMoment(_ m: Moment) {
+        let myKit = store.p.appearance
+        var home = [mySetup(human: true)]
+        for id in store.p.squad.prefix(2) { home.append(prospectParticipant(id, kit: myKit, level: store.p.prospects[id] ?? 1)) }
+        while home.count < 3 { home.append(prospectParticipant("rex", kit: myKit, level: 1)) }
+        let opp = Catalog.crewNames[Int(ProfileStore.stableSeed(m.id) % UInt64(Catalog.crewNames.count))]
+        let away = crew(opp, skill: 0.55)
+        let kit = AppModel.crewKit(opp)
+        var spec = MatchSpec(home: home, away: away, homeName: store.p.name + " FC", awayName: opp,
+                             homeColor: myKit.primary, awayColor: kit.0 == myKit.primary ? 0xFFFFFF : kit.1 == 0x111318 ? kit.0 : kit.0,
+                             homeAISkill: 0.62, awayAISkill: 0.58, theme: ArenaTheme.byId(m.venue), humanId: 0)
+        spec.keeperSkill = [0.6, 0.62]
+        spec.rules = Moments.rules(m)
+        pending = PendingMatch(mode: .moment(m.id), theme: spec.theme, stage: nil, opponentName: opp)
+        let c = MatchFactory.offline(spec)
+        (c.driver as? OfflineDriver)?.sim.apply(m.scenario)
+        c.hapticsOn = store.p.settings.haptics
+        match = c
+        momentResult = nil
+        AudioEngine.shared.setMusic(false)
+        AudioEngine.shared.setCrowd(true, base: 0.22)
+        go(.match)
+    }
+
     // MARK: - Online
 
     func hello() -> Hello {
@@ -230,6 +258,7 @@ final class AppModel: ObservableObject {
         driver.send = online.makeSender()
         online.driver = driver
         let m = MatchFactory.controller(driver: driver, spec: spec)
+        m.duration = info.rules.duration
         m.hapticsOn = store.p.settings.haptics
         pending = PendingMatch(mode: .online(info.mode), theme: spec.theme, stage: nil, opponentName: info.away.name)
         lastOnlineEnd = nil
@@ -282,6 +311,19 @@ final class AppModel: ObservableObject {
         r.mvpName = s.players[best].name
         let rewards = forfeit ? RewardSummary() : store.apply(r)
         if case .tutorial = pend.mode { store.p.tutorialDone = true; store.save() }
+        if case .moment(let mid) = pend.mode, let mo = Moments.moment(mid), !forfeit {
+            let stars = Moments.stars(mo, r, timeUsed: s.time - mo.scenario.elapsed)
+            let key = ProfileStore.today + ":" + mid
+            let prev = store.p.momentStars[key] ?? 0
+            var gems = 0
+            if stars > prev {
+                gems = (stars - prev) * 15
+                store.p.momentStars[key] = stars
+                store.p.gems += gems
+                store.save()
+            }
+            momentResult = (stars, gems)
+        }
         if case .selection = pend.mode, !forfeit, var run = store.p.selection {
             run.goals += r.goals
             if r.won {
@@ -331,6 +373,7 @@ final class AppModel: ObservableObject {
 
     func leavePostMatch() {
         if case .selection = pending?.mode { match = nil; go(.selection); return }
+        if case .moment = pending?.mode { match = nil; go(.moments); return }
         match = nil
         if !store.p.onboarded { go(.onboarding) } else { go(.home) }
     }
@@ -339,6 +382,7 @@ final class AppModel: ObservableObject {
         guard let pend = pending else { return }
         match = nil
         if case .selection = pend.mode { go(.selection); return }
+        if case .moment(let mid) = pend.mode, let mo = Moments.moment(mid) { playMoment(mo); return }
         if case .online(let mode) = pend.mode {
             go(.online)
             if mode != .room { online.queue(mode) }
@@ -374,6 +418,7 @@ struct RootView: View {
             case .showcase: ShowcaseView()
             case .postMatch: PostMatchView()
             case .selection: SelectionView()
+            case .moments: MomentsView()
             case .match:
                 if let m = app.match {
                     MatchScreen(controller: m, onQuit: { app.finishMatch(forfeit: true) })

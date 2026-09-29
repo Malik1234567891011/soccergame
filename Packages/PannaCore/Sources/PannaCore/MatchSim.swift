@@ -19,6 +19,7 @@ public final class MatchSim {
     var hypeHistory: [Int: [(HypeReason, Float)]] = [:]
     var lastPossessionTime: Float = 0
     var prevSafe = V3(0, BallState.radius, 0)
+    var disabledPlayers: Set<Int> = []
     var realTime: Float = 0   // never frozen, used for timing windows
 
     public init(home: TeamSetup, away: TeamSetup, rules: MatchRules = MatchRules(), seed: UInt64 = 1) {
@@ -57,6 +58,44 @@ public final class MatchSim {
     func emit(_ e: MatchEvent) { events.append(StampedEvent(tick: state.tick, event: e)) }
 
     public func setHuman(_ id: Int, _ human: Bool) { state.players[id].isHuman = human }
+
+    /// A scripted situation (Daily Moments): positions, who has the ball, score and time already played.
+    public struct Scenario: Sendable {
+        public var positions: [Int: V2]
+        public var ballOwner: Int
+        public var ballPos: V2?
+        public var score: [Int]
+        public var elapsed: Float
+        public var disabled: Set<Int>          // players removed from play (parked off-pitch)
+        public init(positions: [Int: V2], ballOwner: Int, ballPos: V2? = nil, score: [Int] = [0, 0], elapsed: Float = 0, disabled: Set<Int> = []) {
+            self.positions = positions; self.ballOwner = ballOwner; self.ballPos = ballPos; self.score = score; self.elapsed = elapsed; self.disabled = disabled
+        }
+    }
+
+    public func apply(_ sc: Scenario) {
+        for (i, p) in sc.positions { state.players[i].pos = p; state.players[i].vel = .zero }
+        for i in state.players.indices {
+            let s = geo.attackSign(team: state.players[i].team)
+            state.players[i].facing = s > 0 ? 0 : .pi
+        }
+        for i in sc.disabled {
+            state.players[i].pos = V2(0, geo.shape.halfWidth + 30)   // far off-pitch, out of play
+            state.players[i].action = .celebrate; state.players[i].actionDur = 9999
+        }
+        disabledPlayers = sc.disabled
+        state.score = sc.score
+        state.time = sc.elapsed
+        state.phase = .playing
+        state.phaseT = 0
+        state.ball = BallState()
+        if sc.ballOwner >= 0 {
+            state.ball.owner = sc.ballOwner
+            let o = state.players[sc.ballOwner]
+            state.ball.pos = V3(o.pos.x + o.facingDir.x * 0.5, BallState.radius, o.pos.y)
+        } else if let bp = sc.ballPos {
+            state.ball.pos = V3(bp.x, BallState.radius, bp.y)
+        }
+    }
 
     // MARK: - Kickoff
 
@@ -122,7 +161,7 @@ public final class MatchSim {
 
         state.time += dt
         // Resolve inputs: humans from the network/UI, everyone else from AI.
-        for i in state.players.indices where !state.players[i].isKeeper {
+        for i in state.players.indices where !state.players[i].isKeeper && !disabledPlayers.contains(i) {
             let frame: InputFrame
             if state.players[i].isHuman {
                 frame = inputs[i] ?? state.players[i].lastInput
@@ -132,7 +171,7 @@ public final class MatchSim {
             processInput(i, frame, dt)
         }
         for t in 0..<2 { updateKeeper(t * 4 + 3, dt) }
-        for i in state.players.indices { integratePlayer(i, dt) }
+        for i in state.players.indices where !disabledPlayers.contains(i) { integratePlayer(i, dt) }
         separatePlayers()
         updateBall(dt)
         resolveTackles()
@@ -426,8 +465,8 @@ public final class MatchSim {
 
     func separatePlayers() {
         let r: Float = 0.42
-        for i in 0..<state.players.count {
-            for j in (i + 1)..<state.players.count {
+        for i in 0..<state.players.count where !disabledPlayers.contains(i) {
+            for j in (i + 1)..<state.players.count where !disabledPlayers.contains(j) {
                 var a = state.players[i], b = state.players[j]
                 if a.ghostOf == j || b.ghostOf == i { continue }
                 let d = b.pos - a.pos
@@ -520,7 +559,7 @@ public final class MatchSim {
     func pressure(on i: Int) -> Float {
         let p = state.players[i]
         var best: Float = 0
-        for o in state.players where o.team != p.team && !o.isKeeper {
+        for o in state.players where o.team != p.team && !o.isKeeper && !disabledPlayers.contains(o.id) {
             let d = length(o.pos - p.pos)
             if d < 2.2 { best = max(best, (2.2 - d) / 2.2) }
         }
@@ -705,7 +744,7 @@ public final class MatchSim {
 
     func laneOpenness(from a: V2, to b: V2, team: Int) -> Float {
         var minD: Float = 99
-        for o in state.players where o.team != team {
+        for o in state.players where o.team != team && !disabledPlayers.contains(o.id) {
             let q = closestOnSegment(o.pos, a, b)
             minD = min(minD, length(o.pos - q))
         }
@@ -719,7 +758,7 @@ public final class MatchSim {
         let s = geo.attackSign(team: p.team)
         var best = -1
         var bestScore: Float = -99
-        for m in state.players where m.team == p.team && m.id != i && !(m.isKeeper && forceTarget == nil) {
+        for m in state.players where m.team == p.team && m.id != i && !(m.isKeeper && forceTarget == nil) && !disabledPlayers.contains(m.id) {
             let to = m.pos - p.pos
             let d = length(to)
             if d < 1.5 { continue }
@@ -1173,6 +1212,14 @@ public final class MatchSim {
             }
         }
         b.pos.x = p2.x; b.pos.z = p2.y
+        if b.pos.x.isFinite && b.pos.z.isFinite && !geo.contains(xz(b.pos), margin: 0.25) {
+            // Escaped through a wall seam: put it back just inside, heading inward.
+            let q = geo.clampInside(xz(b.pos))
+            let inward = normalized(V2(0, 0) - q) * max(2, length(V2(b.vel.x, b.vel.z)) * 0.4)
+            b.pos = V3(q.x, max(BallState.radius, b.pos.y), q.y)
+            b.vel = V3(inward.x, b.vel.y, inward.y)
+            b.spin = 0; b.wobble = 0
+        }
         if !(b.pos.x.isFinite && b.pos.y.isFinite && b.pos.z.isFinite) || abs(b.pos.x) > L + 5 || abs(b.pos.z) > geo.shape.halfWidth + 3 {
             // Safety net: drop it back in play near where it escaped instead of dead-centre.
             let keepX = max(-L + 2, min(L - 2, prevSafe.x)), keepZ = max(-geo.shape.halfWidth + 2, min(geo.shape.halfWidth - 2, prevSafe.z))
@@ -1191,7 +1238,7 @@ public final class MatchSim {
         let bv = V2(b.vel.x, b.vel.z)
         var bestI = -1
         var bestD: Float = 99
-        for p in state.players where !p.isKeeper {
+        for p in state.players where !p.isKeeper && !disabledPlayers.contains(p.id) {
             if p.busy || p.touchCooldown > 0 || p.id == b.ignorePlayer { continue }
             if p.action == .tackle && p.actionT < 0.28 { continue }
             let d = length(bp - p.pos)
@@ -1298,7 +1345,7 @@ public final class MatchSim {
                 kb.holdT = 0
                 // Find the most open teammate.
                 var best = -1; var bestScore: Float = -99
-                for m in state.players where m.team == p.team && !m.isKeeper {
+                for m in state.players where m.team == p.team && !m.isKeeper && !disabledPlayers.contains(m.id) {
                     var nearest: Float = 99
                     for o in state.players where o.team != p.team { nearest = min(nearest, length(o.pos - m.pos)) }
                     let sc = nearest + (m.isHuman ? 1.5 : 0) + laneOpenness(from: p.pos, to: m.pos, team: p.team) * 3

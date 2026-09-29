@@ -241,7 +241,7 @@ struct PlayMenu: View {
                     card("CAREER", "The Road — 8 cities, 48 matches, bosses to recruit", "map.fill", Theme.pink) { app.showPlayMenu = false; app.go(.career) }
                     card("THE SELECTION", "Endless gauntlet. Pick EGO perks. 3 lives. Best: \(store.p.selectionBest)", "flame.fill", Theme.gold) { app.showPlayMenu = false; app.go(.selection) }
                     card("QUICK MATCH", "3v3 vs a street crew. Bots adapt to you.", "bolt.fill", Theme.green) { app.showPlayMenu = false; app.play(.quick) }
-                    card("RANKED", "\(store.p.rankName) · climb the ladder", "shield.lefthalf.filled", Color(hex: Catalog.tierColors[store.p.tierIndex])) { app.showPlayMenu = false; app.play(.ranked) }
+                    card("MOMENTS", "3 daily scenarios. Last-minute winners, solo runs, pannas.", "sparkles", Theme.cyan) { app.showPlayMenu = false; app.go(.moments) }
                     card("ONLINE", "PvP & Co-op with real players", "globe", Theme.cyan) { app.showPlayMenu = false; app.go(.online) }
                 }
                 .frame(height: 170)
@@ -259,11 +259,11 @@ struct PlayMenu: View {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: icon).font(.system(size: 30, weight: .black)).foregroundStyle(color)
                 Spacer()
-                Text(title).font(.display(20)).foregroundStyle(.white)
-                Text(sub).font(.label(11)).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.leading)
+                Text(title).font(.display(17)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
+                Text(sub).font(.label(10)).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.leading)
             }
             .padding(16)
-            .frame(width: 150, height: 170, alignment: .leading)
+            .frame(width: 128, height: 170, alignment: .leading)
             .background(Skew(amount: 16).fill(LinearGradient(colors: [color.opacity(0.35), Theme.panel], startPoint: .top, endPoint: .bottom)))
             .overlay(Skew(amount: 16).stroke(color.opacity(0.7), lineWidth: 1.5))
             .shadow(color: color.opacity(0.35), radius: 16)

@@ -17,6 +17,8 @@ struct AIBrain {
     var pressFlow = false
     var reactionScale: Float = 1
     var releaseNext = false
+    /// Aim to keep on the frame the button is released (the sim reads aim at release).
+    var releaseAim: V2? = nil
 }
 
 extension MatchSim {
@@ -56,7 +58,7 @@ extension MatchSim {
 
     func nearestOpponentDistance(_ p: V2, team: Int) -> Float {
         var d: Float = 99
-        for o in state.players where o.team != team { d = min(d, length(o.pos - p)) }
+        for o in state.players where o.team != team && !disabledPlayers.contains(o.id) { d = min(d, length(o.pos - p)) }
         return d
     }
 
@@ -72,8 +74,16 @@ extension MatchSim {
         brain.decisionT -= dt
 
         // Continue multi-frame button holds.
+        if let ra = brain.releaseAim {
+            // Release frame: no buttons, but keep the aim so the pass/shot goes where intended.
+            brain.releaseAim = nil
+            frame.aim = ra
+            brains[i] = brain
+            return frame
+        }
         if brain.holdShoot > 0 {
             brain.holdShoot -= dt
+            if brain.holdShoot <= 0 { brain.releaseAim = brain.aim }
             frame.buttons.insert(.shoot)
             frame.aim = brain.aim
             let goal = geo.goalCenter(forAttackingTeam: p.team)
@@ -84,6 +94,7 @@ extension MatchSim {
         }
         if brain.holdPass > 0 {
             brain.holdPass -= dt
+            if brain.holdPass <= 0 { brain.releaseAim = brain.aim }
             frame.buttons.insert(.pass)
             frame.aim = brain.aim
             if b.owner != i { brain.holdPass = 0 }
@@ -191,7 +202,7 @@ extension MatchSim {
         // Best pass.
         var bestMate = -1
         var bestVal: Float = -9
-        for m in state.players where m.team == p.team && m.id != i && !m.isKeeper {
+        for m in state.players where m.team == p.team && m.id != i && !m.isKeeper && !disabledPlayers.contains(m.id) {
             let open = laneOpenness(from: p.pos, to: m.pos, team: p.team)
             if open < 0.45 - (1 - skill) * 0.3 { continue }
             let mSpace = min(nearestOpponentDistance(m.pos, team: p.team), 6) / 6
@@ -263,7 +274,7 @@ extension MatchSim {
         let p = state.players[i]
         let c = state.players[carrier]
         let s = geo.attackSign(team: p.team)
-        let mates = state.players.filter { $0.team == p.team && !$0.isKeeper && $0.id != carrier }.map { $0.id }.sorted()
+        let mates = state.players.filter { $0.team == p.team && !$0.isKeeper && $0.id != carrier && !disabledPlayers.contains($0.id) }.map { $0.id }.sorted()
         let role = mates.firstIndex(of: i) ?? 0
         let L = geo.shape.halfLength, W = geo.shape.halfWidth
         let carrierSide: Float = c.pos.y >= 0 ? 1 : -1
@@ -308,7 +319,7 @@ extension MatchSim {
         let c = state.players[carrier]
         let skill = aiSkill(p)
         let own = geo.ownGoal(team: p.team)
-        let mates = state.players.filter { $0.team == p.team && !$0.isKeeper }
+        let mates = state.players.filter { $0.team == p.team && !$0.isKeeper && !disabledPlayers.contains($0.id) }
         // A human already on the carrier? Then no AI presses.
         let humanPressing = mates.contains { $0.isHuman && length($0.pos - c.pos) < 3 }
         let aiMates = mates.filter { !$0.isHuman }.sorted { length($0.pos - c.pos) < length($1.pos - c.pos) }
@@ -336,7 +347,7 @@ extension MatchSim {
             }
         } else {
             // Mark the most dangerous free opponent, goal-side.
-            let opps = state.players.filter { $0.team != p.team && !$0.isKeeper && $0.id != carrier }
+            let opps = state.players.filter { $0.team != p.team && !$0.isKeeper && $0.id != carrier && !disabledPlayers.contains($0.id) }
                 .sorted { length($0.pos - own) < length($1.pos - own) }
             let idx = min(max(rank - (humanPressing ? 0 : 1), 0), max(opps.count - 1, 0))
             if opps.isEmpty {
@@ -358,7 +369,7 @@ extension MatchSim {
 
     func decideLoose(_ i: Int, _ brain: inout AIBrain) {
         let p = state.players[i]
-        let mates = state.players.filter { $0.team == p.team && !$0.isKeeper }
+        let mates = state.players.filter { $0.team == p.team && !$0.isKeeper && !disabledPlayers.contains($0.id) }
         var bestT: Float = 99
         var bestId = -1
         for m in mates {

@@ -72,6 +72,28 @@ public struct ArenaGeometry: Sendable {
         return hitNormal
     }
 
+    /// Inside the chamfered pitch or inside a goal box (with a small tolerance).
+    public func contains(_ p: V2, margin: Float = 0) -> Bool {
+        let L = shape.halfLength, W = shape.halfWidth, c = shape.chamfer
+        let ax = abs(p.x), az = abs(p.y)
+        if ax <= L + margin && az <= W + margin && (L - ax) + (W - az) >= c - margin * 1.5 { return true }
+        if ax >= L - margin && ax <= L + shape.goalDepth + margin && az <= shape.goalHalfWidth + margin { return true }
+        return false
+    }
+
+    /// Nearest point comfortably inside the pitch.
+    public func clampInside(_ p: V2, inset: Float = 0.6) -> V2 {
+        let L = shape.halfLength - inset, W = shape.halfWidth - inset, c = shape.chamfer + inset * 0.5
+        var q = V2(clampf(p.x, -L, L), clampf(p.y, -W, W))
+        let ax = abs(q.x), az = abs(q.y)
+        let over = c - ((L - ax) + (W - az))
+        if over > 0 {
+            q.x -= (q.x >= 0 ? 1 : -1) * over / 2
+            q.y -= (q.y >= 0 ? 1 : -1) * over / 2
+        }
+        return q
+    }
+
     /// True when a point is inside the playable area (not in a goal box).
     public func inPitch(_ p: V2) -> Bool {
         abs(p.x) <= shape.halfLength && abs(p.y) <= shape.halfWidth

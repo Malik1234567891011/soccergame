@@ -155,6 +155,9 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
     /// Thread-safe copy of the latest match state for UI code on the main thread.
     var state: MatchState { lock.lock(); defer { lock.unlock() }; return _state }
 
+    /// Regulation length for the HUD clock (moments and challenges are shorter).
+    var duration: Float = 150
+
     /// Recreate a renderer with the same venue and characters (used by clip replays).
     var rendererFactory: (() -> MatchRenderer)?
     func rebuildRenderer() -> MatchRenderer { rendererFactory?() ?? renderer }
@@ -234,7 +237,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
     private func publishHUD(_ s: MatchState) {
         var h = HUDState()
         h.score = s.score
-        let remaining = max(0, 150 - s.time)
+        let remaining = max(0, duration - s.time)
         if s.goldenGoal {
             h.clock = "GOLDEN GOAL"
         } else {
