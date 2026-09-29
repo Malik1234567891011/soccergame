@@ -41,28 +41,31 @@ enum Toon {
     float3 kitSocks;
     #pragma body
     float3 src = _surface.diffuse.rgb;
-    float mx = max(src.r, max(src.g, src.b));
-    float mn = min(src.r, min(src.g, src.b));
+    // Classify in gamma space (textures arrive linearised), tint in linear space.
+    float3 gm = pow(max(src, float3(0.0)), float3(1.0 / 2.2));
+    float mx = max(gm.r, max(gm.g, gm.b));
+    float mn = min(gm.r, min(gm.g, gm.b));
     float sat = (mx - mn) / max(mx, 0.0001);
     float hue = 0.0;
     if (mx - mn > 0.0001) {
-        if (mx == src.r) hue = fmod((src.g - src.b) / (mx - mn), 6.0);
-        else if (mx == src.g) hue = (src.b - src.r) / (mx - mn) + 2.0;
-        else hue = (src.r - src.g) / (mx - mn) + 4.0;
+        if (mx == gm.r) hue = fmod((gm.g - gm.b) / (mx - mn), 6.0);
+        else if (mx == gm.g) hue = (gm.b - gm.r) / (mx - mn) + 2.0;
+        else hue = (gm.r - gm.g) / (mx - mn) + 4.0;
         hue = hue / 6.0;
         if (hue < 0.0) hue += 1.0;
     }
-    float satW = smoothstep(0.5, 0.66, sat) * smoothstep(0.12, 0.25, mx);
+    float satW = smoothstep(0.42, 0.6, sat) * smoothstep(0.1, 0.22, mx);
     float dRed = min(hue, 1.0 - hue);
-    float wRed = (1.0 - smoothstep(0.02, 0.036, dRed)) * satW;
-    float wYel = (1.0 - smoothstep(0.03, 0.05, abs(hue - 0.145))) * satW;
-    float wBlu = (1.0 - smoothstep(0.05, 0.08, abs(hue - 0.64))) * satW;
-    float wGrn = (1.0 - smoothstep(0.05, 0.08, abs(hue - 0.34))) * satW;
-    float shade = clamp(mx / 0.86, 0.0, 1.15);
+    float wRed = (1.0 - smoothstep(0.02, 0.04, dRed)) * satW;
+    float wYel = (1.0 - smoothstep(0.035, 0.06, abs(hue - 0.14))) * satW;
+    float wBlu = (1.0 - smoothstep(0.07, 0.11, abs(hue - 0.63))) * satW;
+    float wGrn = (1.0 - smoothstep(0.08, 0.12, abs(hue - 0.37))) * satW;
+    float shadeG = clamp(mx / 0.82, 0.0, 1.12);
+    float shade = pow(shadeG, 2.2);
     float3 tinted = src;
     tinted = mix(tinted, kitPrimary * shade, wRed);
     tinted = mix(tinted, kitSecondary * shade, wYel);
-    tinted = mix(tinted, kitShorts * max(shade, 0.25), wBlu);
+    tinted = mix(tinted, kitShorts * max(shade, 0.35) + float3(0.012) * shade, wBlu);
     tinted = mix(tinted, kitSocks * shade, wGrn);
     _surface.diffuse = float4(tinted, _surface.diffuse.a);
     """ + surface.components(separatedBy: "#pragma body")[1]

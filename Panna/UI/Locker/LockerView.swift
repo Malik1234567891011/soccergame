@@ -26,7 +26,7 @@ struct LockerView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Spacer().frame(height: 50)
                     HStack(spacing: 6) {
-                        ForEach(tabs.indices, id: \.self) { i in
+                        ForEach(tabs.indices.filter { draft.look == nil || [0, 2, 5].contains($0) }, id: \.self) { i in
                             Button {
                                 AudioEngine.shared.play(.uiTap, volume: 0.5)
                                 tab = i
@@ -183,11 +183,13 @@ struct LockerView: View {
             section("SECONDARY") {
                 ForEach(LockerView.kitColors, id: \.self) { c in swatch(Color(hex: c), selected: draft.secondary == c) { set { $0.secondary = c } } }
             }
+            if draft.look == nil {
             section("PATTERN") {
                 ForEach(ShirtPattern.allCases, id: \.self) { p in
                     let id = "pattern.\(p.rawValue)"
                     chip(p.rawValue.uppercased(), draft.shirtPattern == p, locked: !store.p.owns(id), rarity: Cosmetics.item(id)?.rarity) { pick(id) { $0.shirtPattern = p } }
                 }
+            }
             }
             section("SHORTS") {
                 ForEach(LockerView.kitColors, id: \.self) { c in swatch(Color(hex: c), selected: draft.shorts == c) { set { $0.shorts = c } } }
@@ -195,8 +197,10 @@ struct LockerView: View {
             section("SOCKS") {
                 ForEach(LockerView.kitColors, id: \.self) { c in swatch(Color(hex: c), selected: draft.socks == c) { set { $0.socks = c } } }
             }
+            if draft.look == nil {
             section("SLEEVES") {
                 ForEach(Sleeves.allCases, id: \.self) { s in chip(s.rawValue.uppercased(), draft.sleeves == s) { set { $0.sleeves = s } } }
+            }
             }
             section("NUMBER") {
                 Stepper(value: Binding(get: { draft.number }, set: { n in set { $0.number = n } }), in: 1...99) {

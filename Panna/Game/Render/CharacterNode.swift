@@ -490,6 +490,9 @@ final class CharacterRig {
             let rest = model.restLocal[i].columns.3
             hb.simdPosition = SIMD3(rest.x, rest.y + (curHipsY - hipHeight), rest.z)
         }
+        // Take the short way round (celebration spins end at 2π).
+        while curBody.y - bodyRot.y > .pi { curBody.y -= 2 * .pi }
+        while bodyRot.y - curBody.y > .pi { curBody.y += 2 * .pi }
         let kb = p.action == .kick && p.variant == 2 ? Float(1) : k
         curBody = SCNVector3(curBody.x + (bodyRot.x - curBody.x) * kb, curBody.y + (bodyRot.y - curBody.y) * kb, curBody.z + (bodyRot.z - curBody.z) * kb)
         body.eulerAngles = curBody
@@ -513,11 +516,11 @@ final class CharacterRig {
         case .siu:
             if ct < 0.5 {
                 bodyY = sin(ct / 0.5 * .pi) * 0.7
-                bodyRot.y = ct / 0.5 * .pi
+                bodyRot.y = ct / 0.5 * 2 * .pi
                 hipL.x = -0.4; kneeL.x = 1.0; hipR.x = 0.2; kneeR.x = 1.2
                 shL.z = -1.0; shR.z = 1.0
             } else {
-                bodyRot.y = .pi
+                bodyRot.y = 2 * .pi
                 hipL.z = -0.35; hipR.z = 0.35
                 shL.z = -0.55; shR.z = 0.55; shL.x = 0.3; shR.x = 0.3
                 spineR.x = -0.25; headR.x = -0.35

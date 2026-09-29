@@ -165,6 +165,7 @@ final class AppModel: ObservableObject {
                              homeColor: myKit.primary, awayColor: kit.0 == myKit.primary ? 0xFFFFFF : kit.0,
                              homeAISkill: 0.62, awayAISkill: aiSkill, theme: venue, humanId: bots ? -1 : 0)
         spec.keeperSkill = [0.62, 0.35 + aiSkill * 0.5]
+        if let d = ProcessInfo.processInfo.environment["PANNA_DURATION"], let f = Float(d) { rules.duration = f; rules.introTime = 1 }
         spec.rules = rules
         if case .selection = mode { spec.homeMods = Selection.mods(store.p.selection?.perks ?? []) }
         pending = PendingMatch(mode: mode, theme: venue, stage: stage, opponentName: oppName)
@@ -389,7 +390,15 @@ struct ShowcaseView: View {
                 a.socks = 0x16181F
                 var b = Appearance.random(seed: 21, kit: (0x3B8CFF, 0x111318)); b.shirtPattern = .hoops; b.eyeColor = 1
                 var c = Appearance.random(seed: 33, kit: (0xFFD23B, 0x111318)); c.shirtPattern = .stripes; c.skinTone = 6
-                if env["PANNA_SHOWCASE"] == "unique" {
+                if let r = env["PANNA_SHOWCASE"], r.hasPrefix("roster") {
+                    let page = r == "roster2" ? Array(Catalog.looks.dropFirst(8)) : Array(Catalog.looks.prefix(8))
+                    let kits: [(UInt32, UInt32)] = [(0xFF3B5C, 0xFFFFFF), (0x3B8CFF, 0xFFD23B), (0x39FF88, 0x111318), (0xB26BFF, 0xFFFFFF)]
+                    stage.setCharacters(page.enumerated().map { i, id in
+                        var a = Appearance(); a.look = id
+                        let k = kits[i % kits.count]; a.primary = k.0; a.secondary = k.1; a.socks = k.0; a.shorts = 0x16181F
+                        return (a, id, nil)
+                    }, spacing: 0.85)
+                } else if env["PANNA_SHOWCASE"] == "unique" {
                     let l = Catalog.prospect("luna")!, k = Catalog.prospect("kairo")!
                     stage.setCharacters([(k.appearance, "Kairo", "kairo"), (l.appearance, "Luna", "luna"), (c, "Sora", nil)])
                 } else if env["PANNA_SHOWCASE"] == "prospects" {
