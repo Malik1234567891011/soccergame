@@ -339,7 +339,8 @@ def register_head(key, z0f=0.845):
         idx = np.nonzero(mask[hh - 1 - row])[0]
         if len(idx): ext[row] = (idx.min(), idx.max())
     z0 = zmin + z0f * (zmax - zmin)
-    vx = np.array([v.co.x for v in obj.data.vertices]); vz = np.array([v.co.z for v in obj.data.vertices])
+    axis = 'x' if key in ('front', 'back') else 'y'
+    vx = np.array([getattr(v.co, axis) for v in obj.data.vertices]); vz = np.array([v.co.z for v in obj.data.vertices])
     zs = np.linspace(z0, zmax, 48); dz = (zmax - z0) / 48
     mesh = []
     for z in zs:
@@ -347,7 +348,7 @@ def register_head(key, z0f=0.845):
         if len(sel) >= 2: mesh.append((z, sel.min(), sel.max()))
     mesh = np.array(mesh)
     ppm = (b - t) / (zmax - zmin)
-    sign = 1 if key == 'front' else -1
+    sign = (1 if key == 'front' else -1) if axis == 'x' else (-1 if dirs[key] > 0 else 1)
     headpx = (zmax - z0) * ppm
     best = None
     for sz in np.linspace(0.88, 1.12, 25):
@@ -495,7 +496,7 @@ def projected_color(key):
         hg.inputs['From Min'].default_value = zmin + (HEAD_Z0 - 0.03) * (zmax - zmin)
         hg.inputs['From Max'].default_value = zmin + HEAD_Z0 * (zmax - zmin)
         links.new(P['z'], hg.inputs['Value'])
-        uh = nop('ADD', nop('MULTIPLY', P['x'], hB), hA)
+        uh = nop('ADD', nop('MULTIPLY', P[axis], hB), hA)
         vh = nop('ADD', nop('MULTIPLY', P['z'], hD), hC)
         lerp = lambda a_, b_: nop('ADD', a_, nop('MULTIPLY', nop('SUBTRACT', b_, a_), hg.outputs[0]))
         upx = lerp(upx, uh); vpx = lerp(vpx, vh)
@@ -554,13 +555,15 @@ def weight(key):
         fg.inputs['From Max'].default_value = zmin + (HEAD_Z0 + 0.01) * (zmax - zmin)
         links.new(P['z'], fg.inputs['Value'])
         hemi = nodes.new('ShaderNodeMapRange'); hemi.clamp = True
-        hemi.inputs['From Min'].default_value = 0.0; hemi.inputs['From Max'].default_value = -0.25
+        hemi.inputs['From Min'].default_value = -0.35; hemi.inputs['From Max'].default_value = -0.65   # the face, not the ears
         links.new(Nn['y'], hemi.inputs['Value'])
         w = nop('MAXIMUM', w, nop('MULTIPLY', nop('MULTIPLY', fg.outputs[0], hemi.outputs[0]), 3.0))
     return w
 
 for k in ('front', 'back'):
     if k in views: register_vertical(k); register_head(k)
+for k in ('left', 'right'):
+    if k in views: register_head(k)   # profiles only paint the head: fit them to the mesh's head profile
 
 # ---- vertex colours: sample front/back where confidently seen, flood-fill the rest across the mesh.
 def t_of(view): return view[1][4]
@@ -641,7 +644,7 @@ for key, ch, ny in (('front', 0, -1), ('back', 1, 1)):
         facing = v.normal.y * ny
         vis = vis_data[v.index].color[ch]
         conf = max(0.0, min(1.0, (facing - 0.2) / 0.5)) * vis
-        if key == 'front' and v.co.z > zmin + HEAD_Z0 * (zmax - zmin) and facing > 0:
+        if key == 'front' and v.co.z > zmin + HEAD_Z0 * (zmax - zmin) and facing > 0.5:
             conf = max(conf, 0.9)
         if conf <= 0.05: continue
         u = (v.co.x - c0) * sign * ppm + icx
@@ -674,6 +677,9 @@ for key in [k for k in ('left', 'right') if k in views]:
         if conf <= 0.05: continue
         u = (v.co.y - c0) * sgn * ppm + icx
         row_td = (zmax - v.co.z) * ppm + t
+        if key in head_map:
+            hA, hB, hC, hD = head_map[key]
+            u = hA + hB * v.co.y; row_td = hC + hD * v.co.z
         xi = int(max(0, min(W_ - 1, u))); yi = int(max(0, min(H_ - 1, H_ - 1 - row_td)))
         c = px[yi, xi, :3]
         if conf > vconf[v.index]:
