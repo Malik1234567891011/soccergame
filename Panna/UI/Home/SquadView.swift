@@ -79,7 +79,7 @@ struct SquadView: View {
         let owned = (store.p.prospects[pr.id] ?? 0) > 0
         let inSquad = store.p.squad.contains(pr.id)
         return ZStack {
-            Color.black.opacity(0.75).ignoresSafeArea().onTapGesture { prospectDetail = nil }
+            Color(hex: 0x05060C).opacity(0.9).ignoresSafeArea().onTapGesture { prospectDetail = nil }
             HStack(spacing: 18) {
                 // The footballer in 3D, in your kit — tap to see their celebration.
                 if pr.model != nil {
@@ -138,7 +138,7 @@ struct SquadView: View {
         let copies = store.p.legacies[c.id] ?? 0
         let cost = c.rarity == .legendary ? 1200 : (c.rarity == .epic ? 400 : 120)
         return ZStack {
-            Color.black.opacity(0.75).ignoresSafeArea().onTapGesture { detail = nil }
+            Color(hex: 0x05060C).opacity(0.9).ignoresSafeArea().onTapGesture { detail = nil }
             HStack(spacing: 24) {
                 LegacyCardView(card: c, width: 190, copies: copies, owned: copies > 0)
                 VStack(alignment: .leading, spacing: 8) {
@@ -258,7 +258,7 @@ struct CareerView: View {
     func stageSheet(_ st: CareerStage) -> some View {
         let mask = store.p.careerStars[st.id] ?? 0
         return ZStack {
-            Color.black.opacity(0.75).ignoresSafeArea().onTapGesture { selected = nil }
+            Color(hex: 0x05060C).opacity(0.9).ignoresSafeArea().onTapGesture { selected = nil }
             HStack(spacing: 24) {
                 if let b = st.bossProspect, let pr = Catalog.prospect(b) {
                     ProspectCardView(prospect: pr, width: 170, level: 3)

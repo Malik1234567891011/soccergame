@@ -118,7 +118,7 @@ struct ScoutView: View {
 
     var oddsSheet: some View {
         ZStack {
-            Color.black.opacity(0.75).ignoresSafeArea().onTapGesture { showOdds = false }
+            Color(hex: 0x05060C).opacity(0.9).ignoresSafeArea().onTapGesture { showOdds = false }
             VStack(alignment: .leading, spacing: 8) {
                 Text("ODDS").font(.display(24)).foregroundStyle(.white)
                 ForEach(ProfileStore.rates, id: \.0) { r in

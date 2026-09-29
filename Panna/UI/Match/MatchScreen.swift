@@ -52,6 +52,9 @@ struct MatchScreen: View {
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .onAppear {
+            if ProcessInfo.processInfo.environment["PANNA_PAUSE"] != nil {   // QA: pause menu
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6) { controller.paused = true; showMenu = true }
+            }
             // Covers shader warm-up and sells the matchup.
             let wait = controller.driver.allowsTimeWarp ? 2.3 : 1.6
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) { withAnimation(.easeIn(duration: 0.35)) { showVS = false } }
@@ -295,23 +298,23 @@ struct PauseOverlay: View {
     var onQuit: () -> Void
     var body: some View {
         ZStack {
-            Color.black.opacity(0.6).ignoresSafeArea()
-            VStack(spacing: 16) {
-                Text(online ? "MATCH IS LIVE" : "PAUSED").font(.system(size: 40, weight: .black, design: .rounded)).italic().foregroundStyle(.white)
-                if online { Text("A bot takes your seat if you leave.").font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.7)) }
-                Button(action: onResume) {
-                    Text("RESUME").font(.system(size: 18, weight: .black, design: .rounded))
-                        .frame(width: 220, height: 50)
-                        .background(Color(hex: 0x39FF88), in: Capsule())
-                        .foregroundStyle(.black)
-                }
+            Color(hex: 0x05060C).opacity(0.82).ignoresSafeArea()
+            VStack(spacing: 14) {
+                Text(online ? "MATCH IS LIVE" : "PAUSED").font(.display(40)).foregroundStyle(.white)
+                if online { Text("A bot takes your seat if you leave.").font(.label(13)).foregroundStyle(.white.opacity(0.7)) }
+                GlowButton(title: "RESUME", icon: "play.fill", height: 52, action: onResume)
+                    .frame(width: 240)
                 Button(action: onQuit) {
-                    Text(online ? "LEAVE MATCH" : "FORFEIT").font(.system(size: 15, weight: .heavy, design: .rounded))
-                        .frame(width: 220, height: 44)
-                        .background(.white.opacity(0.12), in: Capsule())
-                        .foregroundStyle(.white)
+                    Text(online ? "LEAVE MATCH" : "FORFEIT").font(.label(14, .black))
+                        .frame(width: 240, height: 44)
+                        .background(Skew(amount: 8).fill(Theme.panel2))
+                        .foregroundStyle(.white.opacity(0.85))
                 }
+                .buttonStyle(PressStyle())
             }
+            .padding(.horizontal, 40).padding(.vertical, 28)
+            .background(RoundedRectangle(cornerRadius: 22).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.1)))
         }
     }
 }
