@@ -359,7 +359,6 @@ final class AppModel: ObservableObject {
         }
         lastReport = r
         lastRewards = rewards
-        if r.won && store.p.stats.wins >= 1 { Reminders.requestIfNeeded() }
         Reminders.schedule(freePackIn: store.freePackRemaining)
         AudioEngine.shared.setCrowd(false)
         AudioEngine.shared.setMusic(store.p.settings.music)

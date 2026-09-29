@@ -3,6 +3,7 @@ import SceneKit
 import PannaCore
 
 struct ScoutView: View {
+    @State private var remindAsked = false
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var store: ProfileStore
     @State private var pulls: [ProfileStore.Pull] = []
@@ -55,7 +56,20 @@ struct ScoutView: View {
                         GlowButton(title: "FREE PACK", icon: "gift.fill", colors: [Theme.pink, Color(hex: 0xC8203F)], textColor: .white, height: 54) { open(1, free: true) }
                             .frame(width: 300)
                     } else {
-                        Text("Next free pack in \(timeString(store.freePackRemaining))").font(.label(11, .black)).foregroundStyle(.white.opacity(0.6))
+                        HStack(spacing: 10) {
+                            Text("Next free pack in \(timeString(store.freePackRemaining))").font(.label(11, .black)).foregroundStyle(.white.opacity(0.6))
+                            // Permission is asked only when the player asks to be reminded, never over a victory screen.
+                            Button {
+                                Reminders.requestIfNeeded { Reminders.schedule(freePackIn: store.freePackRemaining) }
+                                remindAsked = true
+                            } label: {
+                                Label(remindAsked ? "WE'LL PING YOU" : "REMIND ME", systemImage: remindAsked ? "bell.fill" : "bell")
+                                    .font(.label(10, .black)).foregroundStyle(remindAsked ? Theme.green : .white)
+                                    .padding(.horizontal, 10).frame(height: 26)
+                                    .background(Capsule().fill(Theme.panel))
+                            }
+                            .disabled(remindAsked)
+                        }
                     }
                     HStack(spacing: 10) {
                         GlowButton(title: "×1", subtitle: "\(ProfileStore.packCost) GEMS", colors: [Theme.cyan, Color(hex: 0x1FA8C8)], height: 54) { open(1) }

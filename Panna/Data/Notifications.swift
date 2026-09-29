@@ -1,12 +1,18 @@
 import UserNotifications
 
-/// Gentle, useful reminders only (free pack ready, new daily Moments). Asked after the first win, never on launch.
+/// Gentle, useful reminders only (free pack ready, new daily Moments). Asked only when the player taps
+/// "Remind me" next to the free-pack timer, never on launch and never over a result screen.
 enum Reminders {
-    static func requestIfNeeded() {
+    static func requestIfNeeded(then granted: @escaping () -> Void = {}) {
         let c = UNUserNotificationCenter.current()
         c.getNotificationSettings { s in
-            guard s.authorizationStatus == .notDetermined else { return }
-            c.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+            switch s.authorizationStatus {
+            case .notDetermined:
+                c.requestAuthorization(options: [.alert, .sound, .badge]) { ok, _ in if ok { DispatchQueue.main.async(execute: granted) } }
+            case .authorized, .provisional, .ephemeral:
+                DispatchQueue.main.async(execute: granted)
+            default: break
+            }
         }
     }
 
