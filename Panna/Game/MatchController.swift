@@ -124,6 +124,12 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
     @Published var finished = false
     @Published var paused = false
     @Published var cutIn: CutIn?
+    var bossIntro: CutIn? {
+        didSet {
+            guard let b = bossIntro else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.showCutIn(b) }
+        }
+    }
     /// Portrait art per player slot (look_xx / prospect_xx) for anime cut-ins.
     var portraits: [String?] = Array(repeating: nil, count: 8)
     var onEvent: ((MatchEvent, MatchState) -> Void)?

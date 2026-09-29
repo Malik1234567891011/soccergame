@@ -59,6 +59,9 @@ public final class MatchSim {
 
     public func setHuman(_ id: Int, _ human: Bool) { state.players[id].isHuman = human }
 
+    /// Pre-charge a player's Hype (bosses arrive already dangerous).
+    public func boost(player: Int, hype: Float) { state.players[player].hype = min(100, hype) }
+
     /// A scripted situation (Daily Moments): positions, who has the ball, score and time already played.
     public struct Scenario: Sendable {
         public var positions: [Int: V2]

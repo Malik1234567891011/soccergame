@@ -175,8 +175,35 @@ struct LockerView: View {
 
     static let kitColors: [UInt32] = [0xFF3B5C, 0xE0263E, 0xFF8A3B, 0xFFD23B, 0x39FF88, 0x1E9E4A, 0x3BE8FF, 0x3B8CFF, 0x1B2A6B, 0xB26BFF, 0xFF3BD4, 0xFFFFFF, 0x9AA3B5, 0x16181F]
 
+    static let nations: [(String, UInt32, UInt32, UInt32, UInt32, ShirtPattern)] = [
+        // name, primary, secondary, shorts, socks, pattern
+        ("BRAZIL", 0xFFD700, 0x1E9E4A, 0x2A4BD7, 0xFFFFFF, .plain), ("ARGENTINA", 0x8FD3FF, 0xFFFFFF, 0x16181F, 0xFFFFFF, .stripes),
+        ("FRANCE", 0x1B2A6B, 0xFFFFFF, 0xFFFFFF, 0xE0263E, .plain), ("ENGLAND", 0xFFFFFF, 0x1B2A6B, 0x1B2A6B, 0xFFFFFF, .plain),
+        ("GERMANY", 0xFFFFFF, 0x16181F, 0x16181F, 0xFFFFFF, .plain), ("SPAIN", 0xC8102E, 0xFFD23B, 0x1B2A6B, 0x1B2A6B, .plain),
+        ("PORTUGAL", 0x8B1A2B, 0x1E7A3A, 0x1E7A3A, 0x8B1A2B, .plain), ("NETHERLANDS", 0xFF7A1A, 0xFFFFFF, 0x16181F, 0xFF7A1A, .plain),
+        ("ITALY", 0x2A6BFF, 0xFFFFFF, 0xFFFFFF, 0x2A6BFF, .plain), ("NIGERIA", 0x1E9E4A, 0xFFFFFF, 0x1E9E4A, 0x1E9E4A, .chevron),
+        ("JAPAN", 0x1B2A6B, 0xFFFFFF, 0x1B2A6B, 0x1B2A6B, .gradient), ("MOROCCO", 0xC1272D, 0x1E7A3A, 0x1E7A3A, 0xC1272D, .plain),
+        ("USA", 0xFFFFFF, 0x1B2A6B, 0x1B2A6B, 0xFFFFFF, .pinstripe), ("CANADA", 0xE0263E, 0xFFFFFF, 0xFFFFFF, 0xE0263E, .plain),
+        ("MEXICO", 0x1E7A3A, 0xFFFFFF, 0xFFFFFF, 0xE0263E, .plain), ("SENEGAL", 0xFFFFFF, 0x1E9E4A, 0xFFFFFF, 0x1E9E4A, .plain),
+        ("CROATIA", 0xE0263E, 0xFFFFFF, 0xFFFFFF, 0x1B2A6B, .checker), ("KOREA", 0xE0263E, 0x16181F, 0x16181F, 0xE0263E, .plain),
+    ]
+
     var kitTab: some View {
         VStack(alignment: .leading, spacing: 12) {
+            section("NATION PRESETS") {
+                ForEach(LockerView.nations, id: \.0) { n in
+                    Button { set { a in a.primary = n.1; a.secondary = n.2; a.shorts = n.3; a.socks = n.4; if a.look == nil || true { a.shirtPattern = n.5 } } } label: {
+                        HStack(spacing: 5) {
+                            Circle().fill(Color(hex: n.1)).frame(width: 12, height: 12).overlay(Circle().stroke(.white.opacity(0.4)))
+                            Circle().fill(Color(hex: n.2)).frame(width: 12, height: 12).overlay(Circle().stroke(.white.opacity(0.4)))
+                            Text(n.0).font(.label(10, .black)).foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 9).frame(height: 30)
+                        .background(Skew(amount: 6).fill(draft.primary == n.1 && draft.secondary == n.2 ? Theme.green.opacity(0.35) : Theme.panel))
+                    }
+                    .buttonStyle(PressStyle())
+                }
+            }
             section("PRIMARY") {
                 ForEach(LockerView.kitColors, id: \.self) { c in swatch(Color(hex: c), selected: draft.primary == c) { set { $0.primary = c; $0.socks = c } } }
             }

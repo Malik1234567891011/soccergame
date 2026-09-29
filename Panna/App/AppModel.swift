@@ -178,6 +178,10 @@ final class AppModel: ObservableObject {
         pending = PendingMatch(mode: mode, theme: venue, stage: stage, opponentName: oppName)
         let m = MatchFactory.offline(spec)
         m.hapticsOn = store.p.settings.haptics
+        if let b = boss, let pr = Catalog.prospect(b) {
+            (m.driver as? OfflineDriver)?.sim.boost(player: 4, hype: 55)
+            m.bossIntro = CutIn(portrait: pr.portrait, title: pr.name, subtitle: "BOSS · " + pr.title, color: Color(hex: pr.aura))
+        }
         match = m
         AudioEngine.shared.setMusic(false)
         AudioEngine.shared.setCrowd(true, base: 0.22)
