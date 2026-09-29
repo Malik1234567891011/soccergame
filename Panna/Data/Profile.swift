@@ -53,8 +53,22 @@ enum Cosmetics {
     }()
 
     static let lookNames: [String: String] = [
-        "l01": "SPARK", "l02": "DRIFT", "l03": "PIXIE", "l04": "GOLDIE", "l05": "INK", "l06": "CURLS", "l07": "BRAIDS", "l08": "BUNS",
-        "l09": "SILVER", "l10": "TANK", "l11": "SAKURA", "l12": "STORM", "l13": "SENSEI", "l14": "SUNNY", "l15": "VOLT", "l16": "NOOR",
+        "l01": "SPARK", "l02": "DRIFT", "l03": "PIXIE", "l05": "INK", "l13": "SENSEI", "l16": "NOOR",
+        "l04": "EL MAGO", "l06": "LA REINA", "l07": "BULLDOZER", "l08": "LA PULGA", "l12": "THE WALL",
+        "l09": "LE MAESTRO", "l10": "EL FENÓMENO", "l15": "FLASH", "l11": "THE MACHINE", "l14": "EGOIST",
+    ]
+    /// One-line persona for the collectible looks (street legends, not real people).
+    static let lookTaglines: [String: String] = [
+        "l04": "Brazil · Joga bonito. Smiles while he breaks you.",
+        "l06": "Brazil · Queen of the favela cage. Bow or get nutmegged.",
+        "l07": "Ivory Coast · Doesn't go around defenders. Goes through them.",
+        "l08": "Argentina · Smallest on the pitch. Biggest problem you'll ever have.",
+        "l12": "Netherlands · Nobody gets past. Nobody.",
+        "l09": "France · Doesn't run. The ball does.",
+        "l10": "Brazil · Goals are a habit. Fear is a side effect.",
+        "l15": "France · Blink and he's scored.",
+        "l11": "Portugal · The ego is the engine. Siuuu.",
+        "l14": "Unknown · Plays only for herself. Wins anyway.",
     ]
     static let lookRarity: [String: Rarity] = [
         "l01": .common, "l02": .common, "l03": .common, "l05": .common, "l13": .common, "l16": .common,

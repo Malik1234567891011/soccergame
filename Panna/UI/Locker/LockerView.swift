@@ -68,6 +68,9 @@ struct LockerView: View {
         .onAppear {
             draft = store.p.appearance
             refresh()
+            if let id = ProcessInfo.processInfo.environment["PANNA_LOCKERBUY"] {   // QA: locked-look card
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { pick("look." + id) { $0.look = id } }
+            }
             stage.yaw = 0.3
         }
         .onDisappear { commit() }
@@ -101,7 +104,13 @@ struct LockerView: View {
 
     /// Picks an option or opens the purchase sheet when locked.
     func pick(_ id: String, _ change: @escaping (inout Appearance) -> Void) {
-        if store.p.owns(id) || Cosmetics.item(id) == nil { set(change) } else { buying = Cosmetics.item(id) }
+        if store.p.owns(id) || Cosmetics.item(id) == nil { set(change) } else {
+            buying = Cosmetics.item(id)
+            if id.hasPrefix("look.") {   // try it on: preview on the stage without equipping
+                var preview = draft; change(&preview)
+                stage.setCharacters([(preview, store.p.name)])
+            }
+        }
     }
 
     // MARK: Tabs
@@ -338,28 +347,57 @@ struct LockerView: View {
         .buttonStyle(PressStyle())
     }
 
+    func closeBuy() { buying = nil; refresh() }   // drop any try-on preview
+
     func buySheet(_ item: CosmeticItem) -> some View {
-        ZStack {
-            Color.black.opacity(0.7).ignoresSafeArea().onTapGesture { buying = nil }
-            VStack(spacing: 12) {
-                RarityBadge(rarity: item.rarity)
-                if item.category == .look, let img = Art.image("look_" + item.id.dropFirst(5)) {
-                    Image(uiImage: img).resizable().scaledToFill().frame(width: 150, height: 150)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(item.rarity.color, lineWidth: 2))
+        let lookId = item.category == .look ? String(item.id.dropFirst(5)) : nil
+        return ZStack {
+            // Left third stays clear: the stage shows you wearing it.
+            LinearGradient(colors: [.clear, Color(hex: 0x05060C).opacity(0.93), Color(hex: 0x05060C).opacity(0.93)], startPoint: .leading, endPoint: .trailing)
+                .ignoresSafeArea().onTapGesture { closeBuy() }
+            HStack(spacing: 18) {
+                if let id = lookId {
+                    // Trading card with the footballer's aura.
+                    ZStack(alignment: .bottomLeading) {
+                        if let img = Art.image("lookcard_" + id) ?? Art.image("look_" + id) {
+                            Image(uiImage: img).resizable().scaledToFill().frame(width: 170, height: 255).clipped()
+                        }
+                        LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom)
+                        VStack(alignment: .leading, spacing: 2) {
+                            RarityBadge(rarity: item.rarity)
+                            Text(item.name).font(.display(24)).foregroundStyle(.white)
+                        }
+                        .padding(12)
+                    }
+                    .frame(width: 170, height: 255)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(item.rarity.color, lineWidth: 2.5))
+                    .shadow(color: item.rarity.color.opacity(0.6), radius: 22)
                 }
-                Text(item.name).font(.display(28)).foregroundStyle(.white)
-                Text("Unlock for your locker").font(.label(13)).foregroundStyle(.white.opacity(0.7))
-                GlowButton(title: "\(item.price)", icon: "circle.hexagongrid.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 54) {
-                    if store.buy(item) { AudioEngine.shared.play(.reward); buying = nil }
-                    else { AudioEngine.shared.play(.uiBack) }
+                VStack(alignment: .leading, spacing: 10) {
+                    if lookId == nil { RarityBadge(rarity: item.rarity) }
+                    Text(item.name).font(.display(30)).foregroundStyle(.white)
+                    if let id = lookId, let tag = Cosmetics.lookTaglines[id] {
+                        Text(tag).font(.label(13)).italic().foregroundStyle(.white.opacity(0.85)).frame(width: 250, alignment: .leading)
+                        Text("Cosmetic — every footballer plays the same.\nYour skill decides.").font(.label(10)).foregroundStyle(.white.opacity(0.5))
+                        Text("← Trying it on in your kit").font(.label(10, .black)).foregroundStyle(Theme.cyan)
+                    } else {
+                        Text("Unlock for your locker").font(.label(13)).foregroundStyle(.white.opacity(0.7))
+                    }
+                    GlowButton(title: "UNLOCK · \(item.price)", icon: "circle.hexagongrid.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 52) {
+                        if store.buy(item) { AudioEngine.shared.play(.reward); buying = nil; if let id = lookId { set { $0.look = id } } }
+                        else { AudioEngine.shared.play(.uiBack) }
+                    }
+                    .frame(width: 240)
+                    .opacity(store.p.coins >= item.price ? 1 : 0.5)
+                    if store.p.coins < item.price { Text("Not enough coins — win matches, or find it in the Daily Drop").font(.label(11)).foregroundStyle(Theme.pink) }
+                    Button("CLOSE") { closeBuy() }.font(.label(12, .black)).foregroundStyle(.white.opacity(0.6))
                 }
-                .frame(width: 220)
-                .opacity(store.p.coins >= item.price ? 1 : 0.5)
-                if store.p.coins < item.price { Text("Not enough coins — win matches to earn more").font(.label(11)).foregroundStyle(Theme.pink) }
             }
-            .padding(24)
-            .background(RoundedRectangle(cornerRadius: 18).fill(Theme.panel))
+            .padding(20)
+            .background(RoundedRectangle(cornerRadius: 22).fill(Theme.panel.opacity(0.96)))
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.trailing, 24)
         }
     }
 }
