@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCoreTests.build/primary.swiftdeps"
+  },
+  "/Users/malik/soccergame/Packages/PannaCore/Tests/PannaCoreTests/SimTests.swift": {
+    "dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCoreTests.build/SimTests.d",
+    "object": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCoreTests.build/SimTests.swift.o",
+    "swiftmodule": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCoreTests.build/SimTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCoreTests.build/SimTests.swiftdeps",
+    "diagnostics": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCoreTests.build/SimTests.dia"
+  }
+}

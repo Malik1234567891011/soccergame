@@ -1,0 +1,47 @@
+{
+  "": {
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/primary.swiftdeps"
+  },
+  "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/AI.swift": {
+    "dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/AI.d",
+    "object": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/AI.swift.o",
+    "swiftmodule": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/AI~partial.swiftmodule",
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/AI.swiftdeps",
+    "diagnostics": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/AI.dia"
+  },
+  "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/ArenaGeometry.swift": {
+    "dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/ArenaGeometry.d",
+    "object": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/ArenaGeometry.swift.o",
+    "swiftmodule": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/ArenaGeometry~partial.swiftmodule",
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/ArenaGeometry.swiftdeps",
+    "diagnostics": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/ArenaGeometry.dia"
+  },
+  "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchSim.swift": {
+    "dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchSim.d",
+    "object": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchSim.swift.o",
+    "swiftmodule": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchSim~partial.swiftmodule",
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchSim.swiftdeps",
+    "diagnostics": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchSim.dia"
+  },
+  "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchState.swift": {
+    "dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchState.d",
+    "object": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchState.swift.o",
+    "swiftmodule": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchState~partial.swiftmodule",
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchState.swiftdeps",
+    "diagnostics": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/MatchState.dia"
+  },
+  "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Math.swift": {
+    "dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Math.d",
+    "object": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Math.swift.o",
+    "swiftmodule": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Math~partial.swiftmodule",
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Math.swiftdeps",
+    "diagnostics": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Math.dia"
+  },
+  "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Types.swift": {
+    "dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Types.d",
+    "object": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Types.swift.o",
+    "swiftmodule": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Types~partial.swiftmodule",
+    "swift-dependencies": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Types.swiftdeps",
+    "diagnostics": "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/debug/PannaCore.build/Types.dia"
+  }
+}

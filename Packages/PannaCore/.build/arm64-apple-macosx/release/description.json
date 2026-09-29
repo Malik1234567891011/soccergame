@@ -1,0 +1,689 @@
+{
+  "builtTestProducts" : [
+    {
+      "binaryPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.xctest/Contents/MacOS/PannaCorePackageTests",
+      "packagePath" : "/Users/malik/soccergame/Packages/PannaCore",
+      "productName" : "PannaCorePackageTests"
+    }
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.PannaCore-arm64-apple-macosx-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/sources",
+      "importPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/AI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/ArenaGeometry.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchSim.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Math.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Types.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "PannaCore",
+      "moduleOutputPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCore.swiftmodule",
+      "objects" : [
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/AI.swift.o",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/ArenaGeometry.swift.o",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/MatchSim.swift.o",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/MatchState.swift.o",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/Math.swift.o",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/Types.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-whole-module-optimization",
+        "-num-threads",
+        "10",
+        "-serialize-diagnostics",
+        "-O",
+        "-enable-testing",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/include/PannaCore-Swift.h",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "pannacore"
+      ],
+      "outputFileMapPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/AI.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/ArenaGeometry.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/MatchSim.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/MatchState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/Math.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/Types.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCore.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/AI.swift",
+        "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/ArenaGeometry.swift",
+        "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchSim.swift",
+        "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchState.swift",
+        "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Math.swift",
+        "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Types.swift"
+      ],
+      "tempsPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build",
+      "wholeModuleOptimization" : true
+    },
+    "C.PannaCorePackageTests-arm64-apple-macosx-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/sources",
+      "importPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.derived/runner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCoreTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "PannaCorePackageTests",
+      "moduleOutputPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCorePackageTests.swiftmodule",
+      "objects" : [
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/runner.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-whole-module-optimization",
+        "-num-threads",
+        "10",
+        "-serialize-diagnostics",
+        "-O",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/include/PannaCorePackageTests-Swift.h",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "pannacore"
+      ],
+      "outputFileMapPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCorePackageTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.derived/runner.swift"
+      ],
+      "tempsPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build",
+      "wholeModuleOptimization" : true
+    },
+    "C.PannaCoreTests-arm64-apple-macosx-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/sources",
+      "importPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Tests/PannaCoreTests/SimTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCore.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "PannaCoreTests",
+      "moduleOutputPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCoreTests.swiftmodule",
+      "objects" : [
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/SimTests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-whole-module-optimization",
+        "-num-threads",
+        "10",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/index/store",
+        "-O",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "pannacore"
+      ],
+      "outputFileMapPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/SimTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules/PannaCoreTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/malik/soccergame/Packages/PannaCore/Tests/PannaCoreTests/SimTests.swift"
+      ],
+      "tempsPath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build",
+      "wholeModuleOptimization" : true
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "PannaCore" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "PannaCore",
+      "-package-name",
+      "pannacore",
+      "-c",
+      "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/AI.swift",
+      "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/ArenaGeometry.swift",
+      "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchSim.swift",
+      "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchState.swift",
+      "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Math.swift",
+      "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Types.swift",
+      "-I",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-whole-module-optimization",
+      "-num-threads",
+      "10",
+      "-serialize-diagnostics",
+      "-O",
+      "-enable-testing",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/include/PannaCore-Swift.h",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "pannacore",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "PannaCorePackageTests" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "PannaCorePackageTests",
+      "-package-name",
+      "pannacore",
+      "-c",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.derived/runner.swift",
+      "-I",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-whole-module-optimization",
+      "-num-threads",
+      "10",
+      "-serialize-diagnostics",
+      "-O",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/include/PannaCorePackageTests-Swift.h",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "pannacore",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "PannaCoreTests" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "PannaCoreTests",
+      "-package-name",
+      "pannacore",
+      "-c",
+      "/Users/malik/soccergame/Packages/PannaCore/Tests/PannaCoreTests/SimTests.swift",
+      "-I",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-whole-module-optimization",
+      "-num-threads",
+      "10",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/index/store",
+      "-O",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "pannacore",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "PannaCore" : [
+
+    ],
+    "PannaCorePackageTests" : [
+      "PannaCoreTests",
+      "PannaCore"
+    ],
+    "PannaCoreTests" : [
+      "PannaCore"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+    "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.derived/runner.swift" : {
+      "inputs" : [
+
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.derived/runner.swift"
+        }
+      ]
+    }
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/AI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/ArenaGeometry.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchSim.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/MatchState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Math.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Sources/PannaCore/Types.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/sources"
+    },
+    "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.derived/runner.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/sources"
+    },
+    "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/AI.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/ArenaGeometry.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/MatchSim.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/MatchState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/Math.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCore.build/Types.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/SimTests.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCorePackageTests.product/Objects.LinkFileList"
+    },
+    "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/malik/soccergame/Packages/PannaCore/Tests/PannaCoreTests/SimTests.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/PannaCoreTests.build/sources"
+    },
+    "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/malik/soccergame/Packages/PannaCore/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}
