@@ -199,6 +199,9 @@ enum Catalog {
 
     static func prospect(_ id: String) -> Prospect? { prospects.first { $0.id == id } }
 
+    /// Painted roster looks that have a built model in the bundle (l01, l02, …).
+    static let looks: [String] = (1...40).map { String(format: "l%02d", $0) }.filter { CharacterModel.exists($0) }
+
     private static func prospect(_ id: String, _ name: String, _ nation: String, _ flag: String, _ title: String, _ ps: Playstyle, _ r: Rarity,
                                  _ sk: SkillTech, _ sh: ShotTech, _ tr: TraitTech, _ quote: String, hair: HairStyle, hairColor: Int, skin: Int, eye: Int,
                                  kit: (UInt32, UInt32), eyes: EyeStyle, aura: UInt32) -> Prospect {

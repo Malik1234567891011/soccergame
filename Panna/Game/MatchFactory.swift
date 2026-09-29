@@ -56,6 +56,7 @@ enum MatchFactory {
             k.hairStyle = t == 0 ? .buzz : .locs
             k.build = .tall
             k.headwear = .none
+            if !Catalog.looks.isEmpty { k.look = Catalog.looks[(t * 5 + 3) % Catalog.looks.count] }
             infos.append(RenderPlayerInfo(appearance: k, celebration: 0, name: "Keeper"))
             names.append("Keeper")
         }

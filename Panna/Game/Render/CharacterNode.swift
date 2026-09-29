@@ -34,6 +34,7 @@ final class CharacterRig {
     private var restRot: [simd_quatf] = []
     private var headMaterial: SCNMaterial?
     let outlineColor: UIColor?
+    let tinted: Bool
     private var expression: FaceExpression = .neutral
     private var blinkT: Float = 2
     private var exprHold: Float = 0
@@ -47,7 +48,10 @@ final class CharacterRig {
     let scale: Float
 
     init(appearance: Appearance, isKeeper: Bool = false, keeperColor: UInt32 = 0x2A2F3A, name: String = "", modelName: String? = nil, outlineColor: UIColor? = nil) {
-        if let mn = modelName, !isKeeper, let m = CharacterModel.load(mn) { model = m; unique = true } else { model = CharacterModel.shared; unique = false }
+        let chosen = modelName ?? appearance.look
+        if let mn = chosen, let m = CharacterModel.load(mn), (!isKeeper || appearance.look != nil) { model = m; unique = true }
+        else { model = CharacterModel.shared; unique = false }
+        tinted = modelName == nil && appearance.look != nil
         self.outlineColor = outlineColor
         var a = appearance
         if isKeeper {
@@ -155,7 +159,9 @@ final class CharacterRig {
     /// Painted AI-mesh characters: one baked texture, light cel ramp on top of the painted shading.
     private func buildUnique() {
         let boneInv = model.restWorld.map { NSValue(scnMatrix4: SCNMatrix4(simd_inverse($0))) }
-        let mat = Toon.material(.white, texture: model.texture, spec: 0.0, rim: 0.35, shadow: SIMD3(0.8, 0.78, 0.9))
+        let a = appearance
+        let kit = tinted ? Toon.Kit(primary: UIColor(hex: a.primary), secondary: UIColor(hex: a.secondary), shorts: UIColor(hex: a.shorts), socks: UIColor(hex: a.socks)) : nil
+        let mat = Toon.paintedMaterial(texture: model.texture, kit: kit, shadow: SIMD3(0.8, 0.78, 0.9))
         mat.diffuse.wrapS = .clamp; mat.diffuse.wrapT = .clamp
         let outline = Toon.outlineMaterial(width: 0.012, color: outlineColor)
         for m in model.meshes {

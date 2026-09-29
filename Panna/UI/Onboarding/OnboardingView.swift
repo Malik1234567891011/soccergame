@@ -58,6 +58,23 @@ struct OnboardingView: View {
                     .padding(.horizontal, 14).frame(width: 300, height: 48)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
                     .onChange(of: name) { _, n in name = String(n.prefix(12)) }
+                if !Catalog.looks.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Catalog.looks, id: \.self) { id in
+                                Button { draft.look = id; refresh() } label: {
+                                    Group {
+                                        if let img = Art.image("look_" + id) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray }
+                                    }
+                                    .frame(width: 50, height: 50).clipShape(RoundedRectangle(cornerRadius: 9))
+                                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(draft.look == id ? Theme.green : .white.opacity(0.2), lineWidth: draft.look == id ? 3 : 1))
+                                }
+                            }
+                        }
+                    }
+                    .frame(width: 420)
+                }
+                if draft.look == nil {
                 row("SKIN") {
                     ForEach(Appearance.skinTones.indices, id: \.self) { i in
                         dot(Color(hex: Appearance.skinTones[i]), draft.skinTone == i) { draft.skinTone = i; refresh() }
@@ -72,9 +89,10 @@ struct OnboardingView: View {
                     ForEach(0..<6, id: \.self) { i in dot(Color(hex: Appearance.hairColors[i]), draft.hairColor == i) { draft.hairColor = i; refresh() } }
                     ForEach(Appearance.eyeColors.indices.prefix(5), id: \.self) { i in dot(Color(hex: Appearance.eyeColors[i]), draft.eyeColor == i, ring: true) { draft.eyeColor = i; refresh() } }
                 }
+                }
                 row("KIT") {
                     ForEach(LockerView.kitColors.prefix(11), id: \.self) { c in
-                        dot(Color(hex: c), draft.primary == c) { draft.primary = c; draft.socks = c; draft.secondary = c == 0xFFFFFF ? 0x16181F : 0xFFFFFF; refresh() }
+                        dot(Color(hex: c), draft.primary == c) { draft.primary = c; draft.socks = c; draft.secondary = c == 0xFFFFFF ? 0x16181F : 0xFFFFFF; draft.shorts = 0x16181F; refresh() }
                     }
                 }
                 GlowButton(title: "THIS IS ME", icon: "checkmark", height: 54) {

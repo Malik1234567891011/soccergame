@@ -231,6 +231,7 @@ final class ProfileStore: ObservableObject {
         a.hairStyle = .spikes; a.hairColor = 0; a.skinTone = 3; a.eyeColor = 0
         a.primary = 0xFF3B5C; a.secondary = 0xFFFFFF; a.shirtPattern = .plain; a.socks = 0xFF3B5C
         a.number = 10; a.bootColor = 0x39FF88; a.trail = 0x39FF88
+        a.look = Catalog.looks.first
         return a
     }
 

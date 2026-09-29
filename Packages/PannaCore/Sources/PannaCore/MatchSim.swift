@@ -18,6 +18,7 @@ public final class MatchSim {
     var keeperBrains: [KeeperBrain] = [KeeperBrain(), KeeperBrain()]
     var hypeHistory: [Int: [(HypeReason, Float)]] = [:]
     var lastPossessionTime: Float = 0
+    var prevSafe = V3(0, BallState.radius, 0)
     var realTime: Float = 0   // never frozen, used for timing windows
 
     public init(home: TeamSetup, away: TeamSetup, rules: MatchRules = MatchRules(), seed: UInt64 = 1) {
@@ -455,7 +456,7 @@ public final class MatchSim {
         let dim: Float = repeats == 0 ? 1 : (repeats == 1 ? 0.5 : 0.25)
         let deficit = max(0, state.score[1 - p.team] - state.score[p.team])
         let comeback: Float = 1 + 0.25 * Float(min(deficit, 2))
-        let amt = base * dim * comeback * mods(p).hypeGain
+        let amt = base * 1.6 * dim * comeback * mods(p).hypeGain
         p.hype = min(100, p.hype + amt)
         hist.append((reason, realTime))
         hypeHistory[i] = hist
@@ -473,8 +474,9 @@ public final class MatchSim {
             let prevTeam = state.players[prev].team
             if prevTeam == p.team {
                 b.prevTouchSameTeam = prev
-                if b.passFrom == prev && b.intendedReceiver == i || b.passFrom == prev {
+                if b.passFrom == prev {
                     state.players[prev].passesCompleted += 1
+                    addHype(prev, .perfectPass, 3)
                 }
             } else {
                 b.prevTouchSameTeam = -1
@@ -651,7 +653,7 @@ public final class MatchSim {
         state.players[i] = p
         emit(.kick(player: i, power: charge, lofted: false))
         emit(.shot(player: i, perfect: perfect, power: charge))
-        if perfect { addHype(i, .perfectShot, 6) }
+        if perfect { addHype(i, .perfectShot, 6) } else if !rawShot { addHype(i, .perfectShot, 2) }
         keeperBrains[1 - p.team].threatT = 0
         keeperBrains[1 - p.team].reacted = false
     }
@@ -707,7 +709,7 @@ public final class MatchSim {
             let q = closestOnSegment(o.pos, a, b)
             minD = min(minD, length(o.pos - q))
         }
-        return clampf(minD / 2.0, 0, 1)
+        return clampf(minD / 2.6, 0, 1)
     }
 
     func pass(_ i: Int, lofted: Bool, aim: V2, move: V2, oneTouch: Bool = false, forceTarget: Int? = nil) {
@@ -737,7 +739,7 @@ public final class MatchSim {
         if best >= 0 {
             let m = state.players[best]
             var tp = m.pos
-            speed = lofted ? 0 : clampf(11 + length(m.pos - p.pos) * 0.45, 12, 20) * (0.92 + p.stats.passing * 0.12)
+            speed = lofted ? 0 : clampf(12.5 + length(m.pos - p.pos) * 0.45, 14, 21) * (0.92 + p.stats.passing * 0.12)
             if vision { speed *= 1.25 }
             if oneTouch && p.loadout.trait == .tikiTaka { speed *= 1.15 }
             speed *= mods(p).passSpeed
@@ -1078,7 +1080,20 @@ public final class MatchSim {
             return
         }
 
-        // Free flight.
+        // Free flight, substepped so fast shots can't tunnel through the boards.
+        state.ball = b
+        let spd = length(b.vel)
+        let n = max(1, min(6, Int((spd * dt / 0.12).rounded(.up))))
+        for _ in 0..<n { integrateLooseBall(dt / Float(n)) }
+        b = state.ball
+        b.spinAngle += V3(b.vel.z, 0, -b.vel.x) * dt / BallState.radius
+        state.ball = b
+        pickupAndDeflect()
+    }
+
+    func integrateLooseBall(_ dt: Float) {
+        var b = state.ball
+        let g = MatchSim.gravity
         let hv = V2(b.vel.x, b.vel.z)
         let hs = length(hv)
         if (b.spin != 0 || b.wobble != 0) && hs > 2 {
@@ -1106,7 +1121,7 @@ public final class MatchSim {
                 let v = V2(b.vel.x, b.vel.z)
                 let s = length(v)
                 if s > 0 {
-                    let ns = max(0, s - (2.6 + s * 0.35) * dt)
+                    let ns = max(0, s - (1.7 + s * 0.26) * dt)
                     b.vel.x = v.x / s * ns; b.vel.z = v.y / s * ns
                 }
                 b.spin *= 0.97
@@ -1159,13 +1174,14 @@ public final class MatchSim {
         }
         b.pos.x = p2.x; b.pos.z = p2.y
         if !(b.pos.x.isFinite && b.pos.y.isFinite && b.pos.z.isFinite) || abs(b.pos.x) > L + 5 || abs(b.pos.z) > geo.shape.halfWidth + 3 {
+            // Safety net: drop it back in play near where it escaped instead of dead-centre.
+            let keepX = max(-L + 2, min(L - 2, prevSafe.x)), keepZ = max(-geo.shape.halfWidth + 2, min(geo.shape.halfWidth - 2, prevSafe.z))
             b = BallState()
+            b.pos = V3(keepX, BallState.radius, keepZ)
+        } else if abs(b.pos.x) < L && abs(b.pos.z) < geo.shape.halfWidth {
+            prevSafe = b.pos
         }
-        b.spinAngle += V3(b.vel.z, 0, -b.vel.x) * dt / r
         state.ball = b
-
-        // Player contact: pickups, blocks, deflections.
-        pickupAndDeflect()
     }
 
     func pickupAndDeflect() {

@@ -96,6 +96,10 @@ final class AppModel: ObservableObject {
             }
             var a = Appearance.random(seed: seed &+ UInt64(i * 31), kit: (kit.0, kit.1))
             a.shirtPattern = kit.2
+            if !Catalog.looks.isEmpty {
+                a.look = Catalog.looks[Int((seed >> UInt64(3 + i * 7)) % UInt64(Catalog.looks.count))]
+                a.shorts = kit.1 == 0xFFFFFF ? 0x16181F : kit.1
+            }
             let st = styles[Int((seed >> UInt64(i * 4)) % UInt64(styles.count))]
             let skills: [SkillTech] = [.stepOver, .elastico, .croqueta, .dragBack, .roulette]
             let shots: [ShotTech] = [.driven, .finesse, .driven, .knuckle, .trivela]
@@ -199,6 +203,7 @@ final class AppModel: ObservableObject {
                 var look = Appearance.decode(sl.appearance) ?? {
                     var a = Appearance.random(seed: ProfileStore.stableSeed(sl.name + t.name), kit: (t.color, 0xFFFFFF))
                     a.shirtPattern = .plain
+                    if !Catalog.looks.isEmpty { a.look = Catalog.looks[Int(ProfileStore.stableSeed(sl.name) % UInt64(Catalog.looks.count))]; a.shorts = 0x16181F }
                     return a
                 }()
                 if sl.appearance.isEmpty == false && sl.playerId != store.p.id {

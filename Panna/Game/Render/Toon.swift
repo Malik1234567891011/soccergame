@@ -26,6 +26,69 @@ enum Toon {
     _surface.diffuse = float4(col, _surface.diffuse.a);
     """
 
+    /// Painted characters wear a colour-coded kit (red jersey, yellow trim, blue shorts, green socks).
+    /// This remaps those hues to the player's kit while keeping the painted shading and line art.
+    static let kitSurface = """
+    #pragma arguments
+    float3 lightDir;
+    float3 shadowTint;
+    float rimAmount;
+    float3 rimColor;
+    float specAmount;
+    float3 kitPrimary;
+    float3 kitSecondary;
+    float3 kitShorts;
+    float3 kitSocks;
+    #pragma body
+    float3 src = _surface.diffuse.rgb;
+    float mx = max(src.r, max(src.g, src.b));
+    float mn = min(src.r, min(src.g, src.b));
+    float sat = (mx - mn) / max(mx, 0.0001);
+    float hue = 0.0;
+    if (mx - mn > 0.0001) {
+        if (mx == src.r) hue = fmod((src.g - src.b) / (mx - mn), 6.0);
+        else if (mx == src.g) hue = (src.b - src.r) / (mx - mn) + 2.0;
+        else hue = (src.r - src.g) / (mx - mn) + 4.0;
+        hue = hue / 6.0;
+        if (hue < 0.0) hue += 1.0;
+    }
+    float satW = smoothstep(0.5, 0.66, sat) * smoothstep(0.12, 0.25, mx);
+    float dRed = min(hue, 1.0 - hue);
+    float wRed = (1.0 - smoothstep(0.02, 0.036, dRed)) * satW;
+    float wYel = (1.0 - smoothstep(0.03, 0.05, abs(hue - 0.145))) * satW;
+    float wBlu = (1.0 - smoothstep(0.05, 0.08, abs(hue - 0.64))) * satW;
+    float wGrn = (1.0 - smoothstep(0.05, 0.08, abs(hue - 0.34))) * satW;
+    float shade = clamp(mx / 0.86, 0.0, 1.15);
+    float3 tinted = src;
+    tinted = mix(tinted, kitPrimary * shade, wRed);
+    tinted = mix(tinted, kitSecondary * shade, wYel);
+    tinted = mix(tinted, kitShorts * max(shade, 0.25), wBlu);
+    tinted = mix(tinted, kitSocks * shade, wGrn);
+    _surface.diffuse = float4(tinted, _surface.diffuse.a);
+    """ + surface.components(separatedBy: "#pragma body")[1]
+
+    struct Kit { var primary: UIColor; var secondary: UIColor; var shorts: UIColor; var socks: UIColor }
+
+    static func paintedMaterial(texture: UIImage?, kit: Kit?, shadow: SIMD3<Float>) -> SCNMaterial {
+        let m = material(.white, texture: texture, spec: 0, rim: 0.35, shadow: shadow)
+        guard let k = kit else { return m }
+        let args = m.shaderModifiers?[.surface]
+        _ = args
+        m.shaderModifiers = [.surface: kitSurface]
+        func v(_ c: UIColor) -> NSValue {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            c.getRed(&r, green: &g, blue: &b, alpha: &a)
+            // sRGB → linear so the tint matches the texture's colour space.
+            func lin(_ x: CGFloat) -> Float { Float(x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)) }
+            return NSValue(scnVector3: SCNVector3(lin(r), lin(g), lin(b)))
+        }
+        m.setValue(v(k.primary), forKey: "kitPrimary")
+        m.setValue(v(k.secondary), forKey: "kitSecondary")
+        m.setValue(v(k.shorts), forKey: "kitShorts")
+        m.setValue(v(k.socks), forKey: "kitSocks")
+        return m
+    }
+
     /// Inverted-hull outline: push along the normal (scaled with distance so it stays ~1pt on screen).
     static let outlineGeometry = """
     #pragma arguments

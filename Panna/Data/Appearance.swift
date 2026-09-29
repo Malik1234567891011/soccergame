@@ -22,6 +22,8 @@ struct Appearance: Codable, Hashable {
     var accessory: Accessory = .none
     var sleeves: Sleeves = .short
     var trail: UInt32 = 0x39FF88
+    /// Painted roster look id (e.g. "l03"); nil = procedural body.
+    var look: String? = nil
 
     static let skinTones: [UInt32] = [0xFBE3CF, 0xF3CBA5, 0xE0AC80, 0xC68A5E, 0xA0663F, 0x7D4A2B, 0x5A3320, 0x3E2316]
     static let eyeColors: [UInt32] = [0x2B3A55, 0x6B3E1E, 0x2E7D4F, 0x3B8CFF, 0xB0283F, 0x8A5CFF, 0xE0A020, 0x16110E]

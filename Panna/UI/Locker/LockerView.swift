@@ -106,6 +106,25 @@ struct LockerView: View {
 
     var lookTab: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if !Catalog.looks.isEmpty {
+                section("FOOTBALLER") {
+                    ForEach(Catalog.looks, id: \.self) { id in
+                        Button { set { $0.look = id } } label: {
+                            Group {
+                                if let img = Art.image("look_" + id) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray }
+                            }
+                            .frame(width: 58, height: 58).clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(draft.look == id ? Theme.green : .white.opacity(0.15), lineWidth: draft.look == id ? 3 : 1))
+                        }
+                        .buttonStyle(PressStyle())
+                    }
+                    Button { set { $0.look = nil } } label: {
+                        Text("CLASSIC\nBUILDER").font(.label(9, .black)).multilineTextAlignment(.center).foregroundStyle(.white)
+                            .frame(width: 58, height: 58).background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(draft.look == nil ? Theme.green : .white.opacity(0.15), lineWidth: draft.look == nil ? 3 : 1))
+                    }
+                }
+            }
             section("NAME") {
                 TextField("Name", text: Binding(get: { store.p.name }, set: { store.p.name = String($0.prefix(12)) }))
                     .font(.display(20)).foregroundStyle(.white)
@@ -113,6 +132,7 @@ struct LockerView: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
                     .onSubmit { store.save(); refresh() }
             }
+            if draft.look == nil {
             section("SKIN TONE") {
                 ForEach(Appearance.skinTones.indices, id: \.self) { i in
                     swatch(Color(hex: Appearance.skinTones[i]), selected: draft.skinTone == i) { set { $0.skinTone = i } }
@@ -131,6 +151,7 @@ struct LockerView: View {
             }
             section("BUILD") {
                 ForEach(BodyBuild.allCases, id: \.self) { b in chip(b.rawValue.uppercased(), draft.build == b) { set { $0.build = b } } }
+            }
             }
         }
     }

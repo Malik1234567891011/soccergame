@@ -38,7 +38,7 @@ extension MatchSim {
             if pos.y < BallState.radius { pos.y = BallState.radius; vel.y = abs(vel.y) * 0.5; if vel.y < 1.5 { vel.y = 0 } }
             if pos.y <= BallState.radius + 0.01 {
                 let h = V2(vel.x, vel.z); let s = length(h)
-                if s > 0 { let ns = max(0, s - (2.6 + s * 0.35) * step); vel.x = h.x / s * ns; vel.z = h.y / s * ns }
+                if s > 0 { let ns = max(0, s - (1.7 + s * 0.26) * step); vel.x = h.x / s * ns; vel.z = h.y / s * ns }
             }
             var p2 = xz(pos)
             if let n = geo.resolve(&p2, radius: BallState.radius, walls: geo.ballWalls) {
@@ -190,7 +190,7 @@ extension MatchSim {
         var bestVal: Float = -9
         for m in state.players where m.team == p.team && m.id != i && !m.isKeeper {
             let open = laneOpenness(from: p.pos, to: m.pos, team: p.team)
-            if open < 0.3 - (1 - skill) * 0.25 { continue }
+            if open < 0.45 - (1 - skill) * 0.3 { continue }
             let mSpace = min(nearestOpponentDistance(m.pos, team: p.team), 6) / 6
             let progress = (m.pos.x - p.pos.x) * s / 12
             var v = shotQuality(m) * 0.9 + mSpace * 0.4 + progress * 0.35 + open * 0.3
@@ -215,7 +215,7 @@ extension MatchSim {
             brain.sprint = false
             return
         }
-        if bestMate >= 0 && (bestVal > myVal + 0.15 || press < 1.3 || (state.players[bestMate].isHuman && state.players[bestMate].callT > 0)) && rng.chance(0.6 + skill * 0.35) {
+        if bestMate >= 0 && (bestVal > myVal + 0.1 || press < 1.8 || (state.players[bestMate].isHuman && state.players[bestMate].callT > 0)) && rng.chance(0.65 + skill * 0.3) {
             let m = state.players[bestMate]
             brain.aim = normalized(m.pos - p.pos)
             let far = length(m.pos - p.pos) > 14
@@ -234,8 +234,9 @@ extension MatchSim {
                 desire -= normalized(to) * w * 1.3
             }
         }
-        // Prefer the middle when close to the byline.
-        if abs(p.pos.y) > geo.shape.halfWidth - 2.5 { desire.y -= p.pos.y * 0.15 }
+        // Stay off the boards: steer back toward the middle near any wall.
+        if abs(p.pos.y) > geo.shape.halfWidth - 3.5 { desire.y -= p.pos.y * 0.22 }
+        if abs(p.pos.x) > geo.shape.halfLength - 2.5 && abs(p.pos.y) > geo.shape.goalHalfWidth { desire.y -= p.pos.y * 0.3 }
         desire = normalized(desire)
         if dot(desire, V2(s, 0)) < -0.3 { desire = normalized(desire + V2(s, 0)) }
         brain.target = p.pos + desire * 4
@@ -267,11 +268,11 @@ extension MatchSim {
         let vision = c.inFlow && c.loadout.playstyle == .maestro
         if role == 0 || vision {
             // Runner: ahead and on the far side.
-            base = V2(c.pos.x + s * (vision ? 9 : 7), -carrierSide * 5.5)
+            base = V2(c.pos.x + s * (vision ? 10 : 8), -carrierSide * 6.5)
             if abs(base.x) > L - 3 { base.x = s * (L - 3.5) }
         } else {
             // Outlet: behind and wide on the near side.
-            base = V2(c.pos.x - s * 4, carrierSide * 6.5 - c.pos.y * 0.2)
+            base = V2(c.pos.x - s * 5, carrierSide * 7.5 - c.pos.y * 0.2)
         }
         base.x = clampf(base.x, -L + 2, L - 2)
         base.y = clampf(base.y, -W + 1.5, W - 1.5)
@@ -288,11 +289,12 @@ extension MatchSim {
             let sc = space * 0.3 + lane * 1.2 - length(cp - base) * 0.15 - length(cp - p.pos) * 0.02
             if sc > bestScore { bestScore = sc; best = cp }
         }
-        // Keep at least 5 m from teammates.
+        // Keep at least 7 m from teammates.
         for m in state.players where m.team == p.team && m.id != i && !m.isKeeper {
             let d = best - m.pos
-            if length(d) < 5 { best += normalized(d) * (5 - length(d)) * 0.6 }
+            if length(d) < 7 { best += normalized(d) * (7 - length(d)) * 0.7 }
         }
+        best.x = clampf(best.x, -L + 2.5, L - 2.5); best.y = clampf(best.y, -W + 2, W - 2)
         return best
     }
 
@@ -319,8 +321,8 @@ extension MatchSim {
             let ballExposed = length(xz(state.ball.pos) - c.pos) > 0.72
             let facingAway = dot(c.facingDir, normalized(p.pos - c.pos)) < -0.2
             if d < 1.8 && p.tackleCooldown <= 0 {
-                var chance: Float = 0.22 + skill * 0.2
-                if ballExposed { chance += 0.35 }
+                var chance: Float = 0.1 + skill * 0.12
+                if ballExposed { chance += 0.3 }
                 if facingAway { chance += 0.15 }
                 if c.action == .skill { chance *= 0.4 }  // good defenders don't bite
                 if p.inFlow && p.loadout.playstyle == .enforcer { chance = 0.9 }
