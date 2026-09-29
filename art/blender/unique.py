@@ -247,7 +247,12 @@ tex_path = os.path.join(ROOT, 'Panna', 'Resources', 'Characters', NAME + '.png')
 bake_img.filepath_raw = tex_path
 bake_img.file_format = 'PNG'
 bake_img.save()
-print('UNIQUE baked texture', tex_path)
+# Ship as JPEG (10x smaller than PNG, no visible loss for painted art).
+import subprocess
+jpg = tex_path[:-4] + '.jpg'
+subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '88', tex_path, '--out', jpg], capture_output=True)
+if os.path.exists(jpg) and '/Panna/Resources/' in tex_path: os.remove(tex_path)
+print('UNIQUE baked texture', jpg)
 
 # ------------------------------------------------------------------ rig (landmarks from mesh analysis)
 H = mx.z - mn.z

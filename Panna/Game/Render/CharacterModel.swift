@@ -52,7 +52,8 @@ final class CharacterModel {
         let hlen = Int(data.withUnsafeBytes { $0.load(as: UInt32.self) })
         guard let header = try? JSONDecoder().decode(Header.self, from: data.subdata(in: 4..<(4 + hlen))) else { return nil }
         let blob = data.subdata(in: (4 + hlen)..<data.count)
-        let tex = Bundle.main.url(forResource: name, withExtension: "png").flatMap { UIImage(contentsOfFile: $0.path) }
+        let tex = (Bundle.main.url(forResource: name, withExtension: "jpg") ?? Bundle.main.url(forResource: name, withExtension: "png"))
+            .flatMap { UIImage(contentsOfFile: $0.path) }
         let m = CharacterModel(header, blob: blob, texture: tex)
         cache[name] = m
         return m
