@@ -422,9 +422,10 @@ final class CharacterRig {
             k = 1 - exp(-dt * 30)
             // Lean back onto one hip, lead leg straight at the ball, trailing leg tucked, hand planted.
             bodyRot.x = -1.05
-            bodyY = -hipHeight * 0.6
+            bodyY = -hipHeight * 0.52
             hipR.x = -0.55; kneeR.x = 0.05
-            hipL.x = -0.45; kneeL.x = 1.0
+            // Trailing leg folds out sideways along the turf rather than down into it.
+            hipL.x = -0.95; hipL.z = 0.0; kneeL.x = 1.75
             shL.x = 0.9; shL.z = -0.35; elL.x = -0.1
             shR.z = 0.9; shR.x = -0.4
             spineR.x = 0.55; headR.x = 0.35
@@ -479,10 +480,11 @@ final class CharacterRig {
             let side: Float = p.localDir.x >= 0 ? 1 : -1
             let dp = min(t / 0.3, 1)
             bodyRot.z = -side * 1.35 * dp
-            bodyY = p.height - hipHeight * 0.5 * dp
+            bodyY = p.height - hipHeight * 0.4 * dp
             shL.z = -2.8; shR.z = 2.8
             elL.x = 0; elR.x = 0
-            hipL.z = -0.3; hipR.z = 0.3
+            // Legs trail together behind the stretch (a splay would push the lower leg through the turf).
+            hipL.z = -0.3 * (1 - dp); hipR.z = 0.3 * (1 - dp); kneeL.x = 0.25 * dp; kneeR.x = 0.1 * dp
         case .keeperHold:
             shL.x = -1.2; shR.x = -1.2; shL.z = 0.35; shR.z = -0.35
             elL.x = -1.1; elR.x = -1.1
@@ -591,7 +593,7 @@ final class CharacterRig {
                 shL.x = 0.8 * crouch; shR.x = 0.8 * crouch
             } else if f < 1 {
                 bodyRot.x = -2 * .pi * (f * f * (3 - 2 * f))
-                bodyY = tuck * 1.15
+                bodyY = tuck * 0.75
                 kneeL.x = 2.0 * tuck; kneeR.x = 2.0 * tuck; hipL.x = -1.6 * tuck; hipR.x = -1.6 * tuck
                 shL.x = -1.0 * tuck; shR.x = -1.0 * tuck; elL.x = -1.2 * tuck; elR.x = -1.2 * tuck
             } else {
