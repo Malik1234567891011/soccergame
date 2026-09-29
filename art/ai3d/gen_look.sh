@@ -13,6 +13,6 @@ $PY make_ref.py ${ID}_ref_front.png ${ID}_ref_back.png "$BASE View: seen from DI
 $PY make_ref.py ${ID}_ref_front.png ${ID}_ref_left.png "$BASE View: strict SIDE PROFILE seen from the character's LEFT side (the character faces the right edge of the image), arms slightly away from the body." 1024x1536 &
 $PY make_ref.py ${ID}_ref_front.png ${ID}_ref_right.png "$BASE View: strict SIDE PROFILE seen from the character's RIGHT side (the character faces the left edge of the image), arms slightly away from the body." 1024x1536 &
 $PY make_ref.py ${ID}_ref_front.png ../looks/${ID}_card.png "Dramatic gacha trading-card illustration of this exact same character (same face, hair, skin, same red/yellow/blue football kit), dynamic heroic football pose mid-action with a ball, intense expression, glowing personal aura and energy streaks in their signature colour, stadium lights at night, Blue Lock anime key-visual style, vertical composition, character fills the frame. No text, no logos." 1024x1536 &
-$PY run_hy2_shape.py ${ID}_ref_front.png ${ID}_shape.glb
+$PY run_hy2_shape.py ${ID}_ref_front.png ${ID}_shape.glb || /private/tmp/hyvenv/bin/python run_hy2_local.py ${ID}_ref_front.png ${ID}_shape.glb
 wait
 echo "DONE $ID"
