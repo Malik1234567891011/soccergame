@@ -44,6 +44,7 @@ final class CharacterModel {
     static var cache: [String: CharacterModel] = [:]
     let texture: UIImage?
     var kitMask: UIImage?
+    var kitCal: KitRecolor.Calibration?
 
     /// Loads a model from the bundle (`name.bin`, optional `name.png` baked texture for unique characters).
     static func load(_ name: String) -> CharacterModel? {
@@ -57,6 +58,7 @@ final class CharacterModel {
             .flatMap { UIImage(contentsOfFile: $0.path) }
         let m = CharacterModel(header, blob: blob, texture: tex)
         m.kitMask = Bundle.main.url(forResource: name + "_mask", withExtension: "png").flatMap { UIImage(contentsOfFile: $0.path) }
+        m.kitCal = Bundle.main.url(forResource: name + "_kit", withExtension: "json").flatMap { try? Data(contentsOf: $0) }.flatMap(KitRecolor.Calibration.load)
         cache[name] = m
         return m
     }

@@ -131,7 +131,16 @@ def load_view(path, keep_face=False):
     diff = np.abs(px[:, :, :3] - bg).sum(axis=2)
     # Background = bg-coloured pixels connected to the image border. Enclosed pale areas (eye whites, silver
     # hair, highlights) are figure even when they match the backdrop colour.
-    sim = diff <= 0.12
+    # Paper-textured backdrops: compare a lightly blurred image, with a threshold scaled to the backdrop grain.
+    def _box3(a, r=2):
+        c = np.cumsum(np.cumsum(np.pad(a, ((r + 1, r), (r + 1, r)), mode='edge'), 0), 1)
+        k = 2 * r + 1
+        return (c[k:, k:] - c[:-k, k:] - c[k:, :-k] + c[:-k, :-k]) / (k * k)
+    blur = np.stack([_box3(px[:, :, k]) for k in range(3)], 2)
+    dblur = np.abs(blur - bg).sum(axis=2)
+    corners = np.concatenate([dblur[:24, :24].ravel(), dblur[-24:, -24:].ravel(), dblur[:24, -24:].ravel(), dblur[-24:, :24].ravel()])
+    thr = max(0.12, float(np.percentile(corners, 99)) * 1.6)
+    sim = dblur <= thr
     reach = np.zeros_like(sim)
     reach[0, :] = sim[0, :]; reach[-1, :] = sim[-1, :]; reach[:, 0] = sim[:, 0]; reach[:, -1] = sim[:, -1]
     def sweep(reach, axis):
@@ -177,27 +186,75 @@ def load_view(path, keep_face=False):
     top = h - 1 - ys.max(); bottom = h - 1 - ys.min()
     left = xs.min(); right = xs.max()
     # Fill the holes and grow figure colours outward with a multi-scale normalised blur (no directional streaks).
+    # Fill per colour class (code-kit cloth vs everything else) so a gap between arm and shirt never becomes a
+    # skin/shirt blend: each empty pixel takes the class that dominates around it.
     col = px.copy()
-    m = fill_mask.copy()
+    rr, gg, bb_ = px[:, :, 0], px[:, :, 1], px[:, :, 2]
+    mx_ = np.maximum(np.maximum(rr, gg), bb_); mn_ = np.minimum(np.minimum(rr, gg), bb_); d_ = mx_ - mn_
+    sat_ = d_ / np.maximum(mx_, 1e-6)
+    hue_ = np.zeros_like(mx_)
+    nz = d_ > 1e-6
+    i_r = nz & (mx_ == rr); i_g = nz & (mx_ == gg) & ~i_r; i_b = nz & ~i_r & ~i_g
+    hue_[i_r] = ((gg - bb_)[i_r] / d_[i_r]) % 6; hue_[i_g] = (bb_ - rr)[i_g] / d_[i_g] + 2; hue_[i_b] = (rr - gg)[i_b] / d_[i_b] + 4
+    hue_ /= 6
+    kitc = (sat_ > 0.3) & ((hue_ < 0.035) | (hue_ > 0.93) | (np.abs(hue_ - 0.14) < 0.05) | (np.abs(hue_ - 0.63) < 0.12) | (np.abs(hue_ - 0.37) < 0.12) | (sat_ > 0.62))
+    classes = [fill_mask & kitc, fill_mask & ~kitc]
+    filled_any = fill_mask.copy()
     for r in (1, 2, 3, 5, 8, 12, 20, 32, 48):
-        mf = m.astype(np.float32)
-        den = box(mf, r)
-        ok = (den > 1e-3) & ~m
-        for k in range(3):
-            num = box(col[:, :, k] * mf, r)
-            ch = col[:, :, k]; ch[ok] = num[ok] / den[ok]
-        m = m | ok
+        dens, nums = [], []
+        for cm in classes:
+            mf = cm.astype(np.float32)
+            dens.append(box(mf, r)); nums.append([box(col[:, :, k] * mf, r) for k in range(3)])
+        todo = ~filled_any & ((dens[0] > 1e-3) | (dens[1] > 1e-3))
+        pick0 = dens[0] >= dens[1]
+        for ci, sel_ in ((0, todo & pick0), (1, todo & ~pick0)):
+            for k in range(3):
+                ch = col[:, :, k]; ch[sel_] = nums[ci][k][sel_] / np.maximum(dens[ci][sel_], 1e-6)
+            classes[ci] = classes[ci] | sel_
+        filled_any |= todo
     img.pixels[:] = col.ravel()
     img.update()
     view_px[os.path.abspath(path)] = col
     print('VIEW', os.path.basename(path), 'figure px x', left, right, 'y', top, bottom)
     return img, (float(w), float(h), float(left), float(right), float(top), float(bottom)), mask
 
+def kit_calibration(col, mask):
+    """Measure this sheet's own code-kit hues (jersey, shorts, socks) and skin, so the runtime recolour
+    can be tight per character. col/mask are bottom-up arrays from load_view."""
+    import colorsys
+    ys, xs = np.nonzero(mask)
+    y0, y1 = ys.min(), ys.max(); H_ = y1 - y0
+    xc = (xs.min() + xs.max()) / 2; W_ = xs.max() - xs.min()
+    def band(f0, f1, wx, pred):
+        r0, r1 = int(y0 + f0 * H_), int(y0 + f1 * H_)
+        sub = col[r0:r1, int(xc - wx * W_):int(xc + wx * W_), :3].reshape(-1, 3)
+        m = mask[r0:r1, int(xc - wx * W_):int(xc + wx * W_)].reshape(-1)
+        hs = []
+        for c in sub[m][::7]:
+            h, s_, v = colorsys.rgb_to_hsv(*c)
+            if pred(h, s_, v): hs.append((h, s_, v))
+        return hs
+    def med(hs, wrap=False):
+        if not hs: return None
+        h = np.array([x[0] for x in hs])
+        if wrap: h = np.where(h > 0.5, h - 1, h)
+        return float(np.median(h)), float(np.median([x[1] for x in hs]))
+    red = med(band(0.62, 0.72, 0.12, lambda h, s_, v: s_ > 0.45 and v > 0.25 and (h < 0.1 or h > 0.9)), wrap=True)
+    blue = med(band(0.44, 0.52, 0.12, lambda h, s_, v: s_ > 0.35 and 0.5 < h < 0.8))
+    green = med(band(0.06, 0.22, 0.3, lambda h, s_, v: s_ > 0.3 and 0.2 < h < 0.55))
+    skin = med(band(0.86, 0.9, 0.05, lambda h, s_, v: s_ > 0.15 and v > 0.12 and h < 0.15))
+    return {'red': red, 'blue': blue, 'green': green, 'skin': skin}
+
 views = {}
 view_px = {}
 for k in ('front', 'back', 'left', 'right'):
     p = arg('--' + k)
     if p: views[k] = load_view(p, keep_face=(k != 'back'))
+if 'front' in views:
+    _cal = kit_calibration(view_px[os.path.abspath(arg('--front'))], views['front'][2])
+    _calp = os.path.join(ROOT, 'Panna', 'Resources', 'Characters', NAME + '_kit.json')
+    json.dump(_cal, open(_calp, 'w'))
+    print('UNIQUE kit calibration', _cal)
 
 def register_vertical(key):
     """Refine vertical scale/offset of a front/back view by matching silhouette width profiles to the mesh."""
@@ -475,6 +532,61 @@ def view_map(key):
     c0 = band_center_mesh('x', 0.58, 0.72)
     sign = 1 if key == 'front' else -1
     return img, w, h, ppm, icx, c0, sign
+# Body vs arm per height slab: arms hang apart from the torso, so the central cluster of x positions is the torso.
+_Hz0 = zmax - zmin
+_NB = 64
+_z0, _z1 = zmin + 0.40 * _Hz0, zmin + 0.84 * _Hz0
+_slabs = [[] for _ in range(_NB)]
+for v in obj.data.vertices:
+    if _z0 <= v.co.z < _z1: _slabs[int((v.co.z - _z0) / (_z1 - _z0) * _NB)].append(v.co.x)
+_torso = []
+for xs_ in _slabs:
+    if not xs_: _torso.append(None); continue
+    xs_ = sorted(xs_)
+    gap = 0.012 * _Hz0
+    # walk out from the centre until a gap
+    import bisect
+    c_ = bisect.bisect_left(xs_, 0.0); c_ = min(max(c_, 0), len(xs_) - 1)
+    lo = c_
+    while lo > 0 and xs_[lo] - xs_[lo - 1] < gap: lo -= 1
+    hi = c_
+    while hi < len(xs_) - 1 and xs_[hi + 1] - xs_[hi] < gap: hi += 1
+    _torso.append((xs_[lo], xs_[hi]))
+def zone(i):
+    co_ = obj.data.vertices[i].co
+    if not (_z0 <= co_.z < _z1): return 0
+    t_ = _torso[int((co_.z - _z0) / (_z1 - _z0) * _NB)]
+    if t_ is None: return 0
+    return 0 if t_[0] - 1e-4 <= co_.x <= t_[1] + 1e-4 else 1
+zones = [zone(i) for i in range(len(obj.data.vertices))]
+print('UNIQUE zones: arm verts', sum(zones))
+# Code-kit sanity: the torso between hem and collar is shirt. Where a view would paint skin there (it is seeing
+# the arm hanging in front, or the arm drawn slightly off), that view is not trusted for that vertex.
+import colorsys
+_Hz = zmax - zmin
+_ch = [abs(v.co.x) for v in obj.data.vertices if zmin + 0.70 * _Hz <= v.co.z <= zmin + 0.74 * _Hz]
+_thw0 = sorted(_ch)[int(len(_ch) * 0.6)] if _ch else 0.15 * _Hz
+def kit_like(c):
+    h_, s_, v_ = colorsys.rgb_to_hsv(*c)
+    if v_ < 0.22: return True                       # ink / deep shading
+    if s_ < 0.3: return v_ > 0.8                   # white trim/highlight, not grey-beige skin
+    return h_ < 0.035 or h_ > 0.93 or abs(h_ - 0.14) < 0.05 or abs(h_ - 0.63) < 0.12 or abs(h_ - 0.37) < 0.12 or s_ > 0.62
+_vis = obj.data.color_attributes['vis'].data
+rejected = 0
+for key, ch, ny in (('front', 0, -1), ('back', 1, 1)):
+    if key not in views: continue
+    img, w, h, ppm, icx, c0, sign = view_map(key)
+    px = view_px[os.path.abspath(arg('--' + key))]
+    H_, W_ = px.shape[0], px.shape[1]
+    for v in obj.data.vertices:
+        zf = (v.co.z - zmin) / _Hz
+        if not (0.55 < zf < 0.76) or zones[v.index]: continue
+        u = (v.co.x - c0) * sign * ppm + icx
+        row_td = (zmax - v.co.z) * ppm + t_of(views[key])
+        xi = int(max(0, min(W_ - 1, u))); yi = int(max(0, min(H_ - 1, H_ - 1 - row_td)))
+        if not kit_like(tuple(float(x) for x in px[yi, xi, :3])):
+            col_ = list(_vis[v.index].color); col_[ch] = 0.0; _vis[v.index].color = col_; rejected += 1
+print('UNIQUE kit-check rejected', rejected, 'torso samples')
 vcol = [None] * len(obj.data.vertices)
 vconf = [0.0] * len(obj.data.vertices)
 vis_data = obj.data.color_attributes['vis'].data
@@ -525,17 +637,19 @@ for key in [k for k in ('left', 'right') if k in views]:
         if conf > vconf[v.index]:
             vconf[v.index] = conf; vcol[v.index] = (float(c[0]), float(c[1]), float(c[2]))
 # Flood fill uncoloured vertices from coloured neighbours (breadth-first, averaging).
-frontier = [i for i, c in enumerate(vcol) if c is not None]
+# Arms hang against the torso and the generator fuses them at the armpit: fill arm and body separately first,
+# so skin never floods into the shirt (and shirt never onto the arm).
 filled = 0
-while True:
-    nxt = {}
-    for i, c in enumerate(vcol):
-        if c is not None: continue
-        ns = [vcol[j] for j in adj[i] if vcol[j] is not None]
-        if ns: nxt[i] = tuple(sum(x[k] for x in ns) / len(ns) for k in range(3))
-    if not nxt: break
-    for i, c in nxt.items(): vcol[i] = c
-    filled += len(nxt)
+for strict in (True, False):
+    while True:
+        nxt = {}
+        for i, c in enumerate(vcol):
+            if c is not None: continue
+            ns = [vcol[j] for j in adj[i] if vcol[j] is not None and (not strict or zones[j] == zones[i])]
+            if ns: nxt[i] = tuple(sum(x[k] for x in ns) / len(ns) for k in range(3))
+        if not nxt: break
+        for i, c in nxt.items(): vcol[i] = c
+        filled += len(nxt)
 for i in range(len(vcol)):
     if vcol[i] is None: vcol[i] = (0.5, 0.5, 0.5)
 # A couple of smoothing passes on the filled (low-confidence) vertices only.
@@ -543,15 +657,17 @@ for _ in range(3):
     nv = list(vcol)
     for i in range(len(vcol)):
         if vconf[i] < 0.3 and adj[i]:
-            ns = [vcol[j] for j in adj[i]] + [vcol[i]]
+            ns = [vcol[j] for j in adj[i] if zones[j] == zones[i]] + [vcol[i]]
             nv[i] = tuple(sum(x[k] for x in ns) / len(ns) for k in range(3))
     vcol = nv
 vc_layer = obj.data.color_attributes.new(name='vcol', type='FLOAT_COLOR', domain='POINT')
-for i, c in enumerate(vcol): vc_layer.data[i].color = (c[0], c[1], c[2], vconf[i])
+def _lin(x): return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
+# Image pixels are sRGB-encoded; colour attributes are linear (otherwise the fill bakes out washed-out).
+for i, c in enumerate(vcol): vc_layer.data[i].color = (_lin(c[0]), _lin(c[1]), _lin(c[2]), vconf[i])
 print('UNIQUE vertex colours: filled', filled, 'of', len(vcol))
 
 cols, ws = [], []
-for k in [k for k in views if k in ('front', 'back', 'left', 'right')]:
+for k in [k for k in views if k in ('front', 'back', 'left', 'right') and k not in os.environ.get('DEBUG_SKIP', '').split(',')]:
     cols.append(projected_color(k)); ws.append(weight(k))
 wsum = ws[0]
 for w in ws[1:]: wsum = nop('ADD', wsum, w)
@@ -567,7 +683,7 @@ for c, w in zip(cols, ws):
 vc = nodes.new('ShaderNodeVertexColor'); vc.layer_name = 'vcol'
 conf = nop('MINIMUM', nop('MULTIPLY', wsum, 1.6), 1.0)
 mixn = nodes.new('ShaderNodeMix'); mixn.data_type = 'RGBA'
-links.new(conf, mixn.inputs['Factor'])
+links.new(conf, mixn.inputs['Factor']) if not os.environ.get('DEBUG_VCOL') else setattr(mixn.inputs['Factor'], 'default_value', 0.0)
 links.new(vc.outputs['Color'], mixn.inputs['A'])
 links.new(acc, mixn.inputs['B'])
 links.new(mixn.outputs['Result'], emit.inputs['Color'])
@@ -594,6 +710,20 @@ subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '88', tex
 if os.path.exists(jpg) and '/Panna/Resources/' in tex_path: os.remove(tex_path)
 print('UNIQUE baked texture', jpg)
 
+if os.environ.get('DEBUG_FLANK'):
+    bpx = np.array(bake_img.pixels[:], dtype=np.float32).reshape(TEX, TEX, 4)
+    uvd = obj.data.uv_layers.active.data
+    vuv = {}
+    for poly in obj.data.polygons:
+        for li in poly.loop_indices:
+            vuv[obj.data.loops[li].vertex_index] = uvd[li].uv
+    vis_ = obj.data.color_attributes['vis'].data; vc_ = obj.data.color_attributes['vcol'].data
+    cand = [v for v in obj.data.vertices if abs(v.co.z - (zmin + 0.66 * (zmax - zmin))) < 0.02 and v.normal.x > 0.3]
+    cand.sort(key=lambda v: v.co.y)
+    for v in cand[::max(1, len(cand) // 14)]:
+        uv = vuv.get(v.index)
+        t_ = bpx[int(uv[1] * (TEX - 1)), int(uv[0] * (TEX - 1)), :3] if uv else None
+        print('FLANK x%.3f y%.3f n(%.2f,%.2f) vis(%.2f,%.2f) vcol(%.2f,%.2f,%.2f) tex(%.2f,%.2f,%.2f) zone%d' % (v.co.x, v.co.y, v.normal.x, v.normal.y, vis_[v.index].color[0], vis_[v.index].color[1], *vc_[v.index].color[:3], *t_, zones[v.index]))
 # ------------------------------------------------------------------ rig (landmarks from mesh analysis)
 H = mx.z - mn.z
 vs = [v.co.copy() for v in obj.data.vertices]
@@ -692,7 +822,6 @@ for v in obj.data.vertices:
     zf = (v.co.z - mn.z) / H
     if zf < 0.79: val = 1.0
     elif zf < 0.81: val = max(val, (0.81 - zf) / 0.02)
-    if abs(v.co.x) > torso_hw * 1.1: val *= 1.0 - min(1.0, max(0.0, (aw - 0.4) / 0.3))
     if v.co.z > neck_z: val = 0.0
     elif v.co.z > neck_z - 0.02 * H: val *= (neck_z - v.co.z) / (0.02 * H)
     km.data[v.index].color = (val, val, val, 1)

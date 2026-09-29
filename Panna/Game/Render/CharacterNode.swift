@@ -176,7 +176,7 @@ final class CharacterRig {
         var tex = model.texture
         if tinted, let t = model.texture {
             let kit = KitRecolor.Kit(primary: a.primary, secondary: a.secondary, shorts: a.shorts, socks: a.socks)
-            tex = KitRecolor.image(t, id: modelKey, kit: kit, mask: model.kitMask)
+            tex = KitRecolor.image(t, id: modelKey, kit: kit, mask: model.kitMask, cal: model.kitCal ?? .default)
         }
         let mat = Toon.material(.white, texture: tex, spec: 0.0, rim: 0.12, shadow: SIMD3(0.84, 0.82, 0.92))
         mat.diffuse.wrapS = .clamp; mat.diffuse.wrapT = .clamp
