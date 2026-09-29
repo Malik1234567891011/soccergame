@@ -1,4 +1,5 @@
 import SceneKit
+import simd
 import PannaCore
 
 /// Builds a full venue: sky, lighting, pitch, cage, goals, crowd, skyline.
@@ -350,7 +351,7 @@ final class ArenaBuilder {
             // Neon tube along the top of the boards.
             let tube = SCNCylinder(radius: 0.03, height: CGFloat(len))
             let tn = Geo.node(tube, Mat.emissive(UIColor(hex: isEnd ? theme.neonB : theme.neonA), intensity: 2.5), at: SCNVector3(mid.x + out.x * 0.02, bh + 0.03, mid.y + out.y * 0.02))
-            tn.eulerAngles = SCNVector3(0, -ang, Float.pi / 2)
+            tn.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(SIMD3<Float>(d.x, 0, d.y)))
             root.addChildNode(tn)
             if nearSide || nearCorner { continue }
             // Fence above (end walls stay low so goalmouths read clearly).
@@ -373,7 +374,7 @@ final class ArenaBuilder {
             }
             let rail = SCNCylinder(radius: 0.045, height: CGFloat(len))
             let rn = Geo.node(rail, postMat, at: SCNVector3(mid.x + out.x * 0.2, boardH + fh, mid.y + out.y * 0.2))
-            rn.eulerAngles = SCNVector3(0, -ang, Float.pi / 2)
+            rn.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(SIMD3<Float>(d.x, 0, d.y)))
             root.addChildNode(rn)
         }
     }
@@ -446,7 +447,51 @@ final class ArenaBuilder {
 
     // MARK: Crowd & skyline
 
+    /// Painted anime crowd strips (transparent PNG billboards) — far nicer than capsule people.
+    private func paintedCrowd(rows: Int) -> Bool {
+        let imgs = ["crowd1", "crowd2"].compactMap { n -> UIImage? in
+            guard let u = Bundle.main.url(forResource: n, withExtension: "png") else { return nil }
+            return UIImage(contentsOfFile: u.path)
+        }
+        guard !imgs.isEmpty else { return false }
+        let L = shape.halfLength, W = shape.halfWidth
+        let standMat = Mat.pbr(UIColor(hex: theme.wall).lighter(0.05), rough: 0.8, rim: 0)
+        for r in 0..<rows {
+            let z = -W - 2.2 - Float(r) * 1.3
+            let y = Float(r) * 0.75
+            let step = SCNBox(width: CGFloat(2 * L + 6), height: 0.6, length: 1.3, chamferRadius: 0)
+            root.addChildNode(Geo.node(step, standMat, at: SCNVector3(0, y + 0.1, z)))
+            var x = -L - 1.5
+            var k = r
+            while x < L + 1.5 {
+                let img = imgs[k % imgs.count]
+                let w: Float = 7.5, h: Float = w * Float(img.size.height / img.size.width)
+                let plane = SCNPlane(width: CGFloat(w), height: CGFloat(h))
+                let m = SCNMaterial()
+                m.lightingModel = .constant
+                m.diffuse.contents = img
+                m.multiply.contents = UIColor(white: theme.night ? 0.62 : 0.85, alpha: 1)
+                m.isDoubleSided = true
+                m.transparencyMode = .aOne
+                m.writesToDepthBuffer = false
+                plane.materials = [m]
+                let n = SCNNode(geometry: plane)
+                n.position = SCNVector3(x + w / 2, y + 0.4 + h * 0.42, z + 0.2)
+                n.eulerAngles.x = -0.18
+                n.renderingOrder = -2 + r
+                root.addChildNode(n)
+                crowd.append(n)
+                let d = Double(k % 5) * 0.13
+                n.runAction(.sequence([.wait(duration: d), .repeatForever(.sequence([.moveBy(x: 0, y: 0.07, z: 0, duration: 0.45), .moveBy(x: 0, y: -0.07, z: 0, duration: 0.45)]))]))
+                x += w * 0.92
+                k += 1
+            }
+        }
+        return true
+    }
+
     private func stands(rows: Int, dense: Bool) {
+        if paintedCrowd(rows: dense ? 3 : 1) { return }
         let L = shape.halfLength, W = shape.halfWidth
         let standMat = Mat.pbr(UIColor(hex: theme.wall).lighter(0.08), rough: 0.7, rim: 0)
         let bodyGeo = SCNCapsule(capRadius: 0.22, height: 0.9)

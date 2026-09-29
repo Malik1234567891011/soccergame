@@ -109,6 +109,7 @@ struct HUDState: Equatable {
     var stamina: Float = 1
     var teamNames = ["HOME", "AWAY"]
     var flowName = "FLOW"
+    var colors: [UInt32] = [0xFF3B5C, 0x3B8CFF]
     var intro: Float = 0
     var venue = ""
     var venueCity = ""
@@ -216,6 +217,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         let firstKick = s.time == 0 && s.score == [0, 0]
         h.kickoffCountdown = s.phase == .kickoff ? max(0, (firstKick ? 3.2 : 1.1) - s.phaseT) : 0
         if firstKick && s.phase == .kickoff && s.phaseT < 2.4 { h.intro = min(1, (2.4 - s.phaseT) / 0.5) ; h.kickoffCountdown = 0 }
+        h.colors = [renderer.teamColors[0].hexValue, renderer.teamColors[1].hexValue]
         h.venue = renderer.theme.name
         h.venueCity = renderer.theme.city
         h.goldenGoal = s.goldenGoal

@@ -112,6 +112,7 @@ struct MatchHUD: View {
 
 struct Scorebug: View {
     let hud: HUDState
+    func isLight(_ c: UInt32) -> Bool { Double((c >> 16) & 0xFF) * 0.3 + Double((c >> 8) & 0xFF) * 0.59 + Double(c & 0xFF) * 0.11 > 150 }
     var body: some View {
         HStack(spacing: 0) {
             Text(hud.teamNames[0].uppercased())
@@ -121,8 +122,9 @@ struct Scorebug: View {
                 .padding(.trailing, 10)
             Text("\(hud.score[0])")
                 .font(.system(size: 24, weight: .black, design: .rounded))
+                .foregroundStyle(isLight(hud.colors[0]) ? Color.black : Color.white)
                 .frame(width: 38)
-                .background(Color(hex: 0xFF3B5C))
+                .background(Color(hex: hud.colors[0]))
             Text(hud.goldenGoal ? "GOLDEN\nGOAL" : hud.clock)
                 .multilineTextAlignment(.center)
                 .font(.system(size: hud.goldenGoal ? 10 : 15, weight: .bold, design: .monospaced))
@@ -130,8 +132,9 @@ struct Scorebug: View {
                 .frame(width: 78)
             Text("\(hud.score[1])")
                 .font(.system(size: 24, weight: .black, design: .rounded))
+                .foregroundStyle(isLight(hud.colors[1]) ? Color.black : Color.white)
                 .frame(width: 38)
-                .background(Color(hex: 0x3B8CFF))
+                .background(Color(hex: hud.colors[1]))
             Text(hud.teamNames[1].uppercased())
                 .font(.system(size: 13, weight: .heavy, design: .rounded))
                 .lineLimit(1).minimumScaleFactor(0.55)

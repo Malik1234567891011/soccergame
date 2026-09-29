@@ -161,8 +161,13 @@ final class AppModel: ObservableObject {
         while home.count < 3 { home.append(prospectParticipant("rex", kit: myKit, level: 1)) }
         let away = crew(oppName, skill: aiSkill, boss: boss)
         let kit = AppModel.crewKit(oppName)
+        // Team identity colour for rings/outlines/HUD: dark kits use their bright trim colour.
+        func lum(_ c: UInt32) -> Double { Double((c >> 16) & 0xFF) * 0.3 + Double((c >> 8) & 0xFF) * 0.59 + Double(c & 0xFF) * 0.11 }
+        var awayIdent = lum(kit.0) < 60 ? kit.1 : kit.0
+        if awayIdent == myKit.primary { awayIdent = 0xFFFFFF }
+        let homeIdent = lum(myKit.primary) < 60 ? myKit.secondary : myKit.primary
         var spec = MatchSpec(home: home, away: away, homeName: store.p.name + " FC", awayName: oppName,
-                             homeColor: myKit.primary, awayColor: kit.0 == myKit.primary ? 0xFFFFFF : kit.0,
+                             homeColor: homeIdent, awayColor: awayIdent,
                              homeAISkill: 0.62, awayAISkill: aiSkill, theme: venue, humanId: bots ? -1 : 0)
         spec.keeperSkill = [0.62, 0.35 + aiSkill * 0.5]
         if let d = ProcessInfo.processInfo.environment["PANNA_DURATION"], let f = Float(d) { rules.duration = f; rules.introTime = 1 }
