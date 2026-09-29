@@ -523,6 +523,14 @@ extension MatchSim {
                 brain.pressSkill = true
                 let side: Float = rng.chance(0.5) ? 1 : -1
                 brain.target = p.pos + normalized(perp(p.facingDir) * side + p.facingDir * 0.6) * 4
+                // Read the defender: one charging in square has his legs open — go straight through them.
+                if let o = state.players.first(where: { o in
+                    guard o.team != p.team && !o.isKeeper && !o.busy else { return false }
+                    let to = o.pos - p.pos, d = length(to)
+                    return d < 1.65 && dot(normalized(to), p.facingDir) > 0.78 && (dot(o.vel, -normalized(to)) > 1.0 || length(o.vel) > 4.0)
+                }), rng.chance(0.3 + skill * 0.6) {
+                    brain.target = p.pos + normalized(o.pos - p.pos) * 4
+                }
             }
         }
     }
@@ -643,6 +651,11 @@ extension MatchSim {
                 if facingAway { chance += 0.15 }
                 if length(c.vel) < 1.5 { chance += 0.3 }   // a stationary carrier invites the tackle
                 if c.action == .skill { chance *= 0.4 }  // good defenders don't bite
+                // Tackles are won by timing (see resolveTackles): good defenders wait until the ball is in reach
+                // on their side; weak ones dive in from too far or through the man.
+                let dBallMe = length(xz(state.ball.pos) - p.pos)
+                let goodMoment = min(d, dBallMe) < 1.25 && dBallMe <= d + 0.1 && dot(c.facingDir, normalized(c.pos - p.pos)) <= 0.55
+                if goodMoment { chance += skill * 0.25 } else { chance *= 1.1 - skill }
                 if p.inFlow && p.loadout.playstyle == .enforcer { chance = 0.9 }
                 if rng.chance(chance) { brain.pressTackle = true }
             } else if d > 1.8 && d < 3.4 && p.tackleCooldown <= 0 && length(c.vel) > 5 {

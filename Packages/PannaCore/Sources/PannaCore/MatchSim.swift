@@ -894,8 +894,10 @@ public final class MatchSim {
             let d = length(to)
             if d > 2.6 { continue }
             let tn = normalized(to)
-            // PANNA: defender square in front, skill pushed straight at them.
-            if !didNutmeg && d < 1.7 && dot(tn, face) > 0.75 && dot(burst, tn) > 0.6 && tech != .rainbow && tech != .dragBack {
+            // PANNA: defender square in front, skill pushed straight at them. Only works when their legs are open:
+            // they're charging in, mid-lunge or running. A set defender who jockeys (doesn't close) reads it.
+            let legsOpen = dot(o.vel, -tn) > 1.0 || length(o.vel) > 4.0 || o.action == .tackle
+            if !didNutmeg && legsOpen && d < 1.7 && dot(tn, face) > 0.75 && dot(burst, tn) > 0.6 && tech != .rainbow && tech != .dragBack {
                 nutmeg(i, victim: o.id)
                 didNutmeg = true
                 beatOne = true
@@ -1011,7 +1013,8 @@ public final class MatchSim {
                 if (!slide && t >= 0.28) || (slide && t >= 0.5) {
                     // Whiffed.
                     state.players[i].actionVariant = 2
-                    if !slide { state.players[i].action = .stumble; state.players[i].actionT = 0; state.players[i].actionDur = 0.3 }
+                    // A whiffed lunge leaves you off balance: long enough for the carrier to go past (mashing costs).
+                    if !slide { state.players[i].action = .stumble; state.players[i].actionT = 0; state.players[i].actionDur = 0.5 }
                     emit(.tackleMissed(tackler: i, slide: slide))
                 }
                 continue
@@ -1037,15 +1040,21 @@ public final class MatchSim {
                     addHype(o.id, .ankles, 14)
                     continue
                 }
+                // Skill decides tackles, not dice: go in ball-side, from the front or side, and commit at the
+                // right range (contact at the start of the lunge). A stretched lunge from too far, a tackle
+                // through the man, or one from behind almost never wins it. Stats only nudge the close calls.
                 let ballFirst = dBall <= dBody + 0.15
                 let fromBehind = dot(o.facingDir, p.actionDir) > 0.55
-                var chance: Float = 0.62 + (p.stats.defending - o.stats.control * 0.8) * 0.35
-                if !ballFirst { chance -= 0.25 }
-                if fromBehind { chance -= slide ? 0.35 : 0.15 }
-                if slide { chance += 0.1 }
-                if lengthSq(o.vel) < 1 && !fromBehind { chance -= 0.1 }
+                let lunge = t - (slide ? 0.05 : 0.08)          // how far into the active window contact came
+                let clean = lunge < (slide ? 0.14 : 0.07)
+                let stretched = lunge > (slide ? 0.3 : 0.13)
+                var q: Float = 0.5
+                q += ballFirst ? 0.3 : -0.3
+                if fromBehind { q -= slide ? 0.45 : 0.3 }
+                q += clean ? 0.15 : (stretched ? -0.2 : 0)
+                q += (p.stats.defending - o.stats.control * 0.8) * 0.3
+                var chance = clampf(0.5 + (q - 0.5) * 2.2, 0.04, 0.97)
                 if wall { chance = 1 }
-                chance = clampf(chance, 0.15, 1)
                 state.players[i].actionVariant = 1
                 if rng.chance(chance) {
                     // Won it.

@@ -95,6 +95,9 @@ enum PoseSheet {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var look = Appearance()
         if model == "classic" { look.hairStyle = .spikes } else if model.hasPrefix("l") { look.look = model; look.primary = 0xFF3B5C; look.secondary = 0xFFFFFF; look.shorts = 0x16181F; look.socks = 0xFF3B5C }
+        if let k = ProcessInfo.processInfo.environment["PANNA_POSEKIT"], let c = UInt32(k, radix: 16) {   // QA: kit colour
+            look.primary = c; look.socks = c; look.secondary = 0xFFFFFF; look.shorts = 0x1B2A6B
+        }
         let modelName: String? = (model == "classic" || model.hasPrefix("l")) ? nil : model
         let cell = CGSize(width: 260, height: 300)
         for clip in clips() {
