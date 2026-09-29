@@ -7,7 +7,9 @@ img, out = sys.argv[1], sys.argv[2]
 res = sys.argv[3] if len(sys.argv) > 3 else "1024"
 dec = int(sys.argv[4]) if len(sys.argv) > 4 else 200000
 tex = int(sys.argv[5]) if len(sys.argv) > 5 else 2048
-c = Client("microsoft/TRELLIS.2", verbose=False)
+import os
+tok = next((l.split("=", 1)[1].strip() for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env.local")) if l.startswith("HF_TOKEN=")), None)
+c = Client("microsoft/TRELLIS.2", verbose=False, token=tok)
 t0 = time.time()
 try: c.predict(api_name="/start_session")
 except Exception as e: print("start_session:", e)
