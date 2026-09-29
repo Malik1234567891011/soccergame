@@ -64,6 +64,8 @@ enum Cosmetics {
     ]
     /// What the shop and pass can offer: things you can actually see on a painted footballer.
     static let sellable: Set<CosmeticCategory> = [.look, .trail]
+    /// Free footballers, in the order a new player sees them (cleanest first-impression first).
+    static let starterLooks: [String] = ["l02", "l05", "l03", "l13", "l16", "l01"].filter { Catalog.looks.contains($0) }
 
     static func item(_ id: String) -> CosmeticItem? { items.first { $0.id == id } }
     static var defaults: Set<String> { Set(items.filter { $0.rarity == .common }.map { $0.id }) }
@@ -247,7 +249,7 @@ final class ProfileStore: ObservableObject {
             p = Profile()
             p.appearance = ProfileStore.starterLook()
         }
-        if p.appearance.look == nil && !p.lookMigrated, let first = Catalog.looks.first {
+        if p.appearance.look == nil && !p.lookMigrated, let first = Cosmetics.starterLooks.first ?? Catalog.looks.first {
             p.appearance.look = first
             p.lookMigrated = true
         }
@@ -262,7 +264,7 @@ final class ProfileStore: ObservableObject {
         a.hairStyle = .spikes; a.hairColor = 0; a.skinTone = 3; a.eyeColor = 0
         a.primary = 0xFF3B5C; a.secondary = 0xFFFFFF; a.shirtPattern = .plain; a.socks = 0xFF3B5C
         a.number = 10; a.bootColor = 0x39FF88; a.trail = 0x39FF88
-        a.look = Catalog.looks.first
+        a.look = Cosmetics.starterLooks.first ?? Catalog.looks.first
         return a
     }
 

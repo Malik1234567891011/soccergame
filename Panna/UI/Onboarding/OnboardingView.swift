@@ -66,7 +66,7 @@ struct OnboardingView: View {
                 if !Catalog.looks.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            ForEach(Catalog.looks, id: \.self) { id in
+                            ForEach(Cosmetics.starterLooks, id: \.self) { id in
                                 Button { draft.look = id; refresh() } label: {
                                     Group {
                                         if let img = Art.image("look_" + id) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray }
@@ -78,6 +78,7 @@ struct OnboardingView: View {
                         }
                     }
                     .frame(width: 420)
+                    Text("10 more footballers to unlock — rare, epic and legendary.").font(.label(10, .black)).foregroundStyle(Theme.gold.opacity(0.85))
                 }
                 if draft.look == nil {
                 row("SKIN") {
