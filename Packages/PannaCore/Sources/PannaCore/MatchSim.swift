@@ -1345,9 +1345,10 @@ public final class MatchSim {
         let goalX = -s * L
         let bp = xz(b.pos)
         let skill = keeperOf(team: p.team).stats.defending
-        // Back-pass rule: a ball a teammate deliberately played (and nobody else touched since) can't be handled.
-        let backPass = b.owner < 0 && b.passFrom >= 0 && b.passFrom != i && b.lastTouch == b.passFrom
-            && state.players[b.passFrom].team == p.team
+        // Back-pass rule: a ball a teammate deliberately kicked (pass, clearance, volley, shot) and nobody else
+        // touched since can't be handled. Tackles and deflections can.
+        let kicker = b.lastTouch >= 0 && (b.passFrom == b.lastTouch || b.shotBy == b.lastTouch) ? b.lastTouch : -1
+        let backPass = b.owner < 0 && kicker >= 0 && kicker != i && state.players[kicker].team == p.team
 
         // Holding the ball: distribute.
         if b.owner == i {

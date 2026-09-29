@@ -209,12 +209,13 @@ final class AppModel: ObservableObject {
         for id in store.p.squad.prefix(2) { home.append(prospectParticipant(id, kit: myKit, level: store.p.prospects[id] ?? 1)) }
         while home.count < 3 { home.append(prospectParticipant("rex", kit: myKit, level: 1)) }
         let opp = Catalog.crewNames[Int(ProfileStore.stableSeed(m.id) % UInt64(Catalog.crewNames.count))]
-        let away = crew(opp, skill: 0.55)
+        let away = crew(opp, skill: 0.45)
         let kit = AppModel.crewKit(opp)
         var spec = MatchSpec(home: home, away: away, homeName: store.p.name + " FC", awayName: opp,
                              homeColor: myKit.primary, awayColor: kit.0 == myKit.primary ? 0xFFFFFF : kit.1 == 0x111318 ? kit.0 : kit.0,
-                             homeAISkill: 0.62, awayAISkill: 0.58, theme: ArenaTheme.byId(m.venue), humanId: 0)
-        spec.keeperSkill = [0.6, 0.62]
+                             homeAISkill: 0.62, awayAISkill: 0.45, theme: ArenaTheme.byId(m.venue), humanId: 0)
+        // Moments are daily highlight reels: beatable with a good move, not a wall (the keeper smother is strong).
+        spec.keeperSkill = [0.6, 0.5]
         spec.rules = Moments.rules(m)
         pending = PendingMatch(mode: .moment(m.id), theme: spec.theme, stage: nil, opponentName: opp)
         let c = MatchFactory.offline(spec)
