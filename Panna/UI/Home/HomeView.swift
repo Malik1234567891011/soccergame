@@ -51,9 +51,17 @@ struct HomeView: View {
             AppBackground(accent: Color(hex: p.appearance.primary))
             HStack(spacing: 0) {
                 // Your footballer.
-                ZStack(alignment: .bottom) {
-                    StageView(stage: stage)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The footballer stands on the plate, never behind it.
+                VStack(spacing: 0) {
+                    ZStack(alignment: .bottom) {
+                        Ellipse()
+                            .fill(RadialGradient(colors: [Color(hex: p.appearance.primary).opacity(0.55), .clear], center: .center, startRadius: 2, endRadius: 80))
+                            .frame(width: 170, height: 26)
+                            .offset(y: -6)
+                        StageView(stage: stage)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .padding(.top, 50)
                     PlayerPlate()
                         .padding(.bottom, 10)
                 }
@@ -91,8 +99,9 @@ struct HomeView: View {
         .onAppear {
             stage.setCharacters([(p.appearance, p.name)])
             stage.yaw = 0.35
-            stage.camera.position = SCNVector3Make(0, 1.0, 6.8)
-            stage.camera.look(at: SCNVector3Make(0, 0.72, 0))
+            // Frame head-to-boots: feet land on the bottom edge, right above the plate.
+            stage.camera.position = SCNVector3Make(0, 1.0, 4.6)
+            stage.camera.look(at: SCNVector3Make(0, 0.96, 0))
             AudioEngine.shared.setMusic(store.p.settings.music)
             store.refreshDaily()
         }
@@ -117,14 +126,14 @@ struct PlayerPlate: View {
     var body: some View {
         let p = store.p
         VStack(spacing: 2) {
-            HStack(spacing: 8) {
-                Text(p.name.uppercased()).font(.display(26)).foregroundStyle(.white)
-                Text("#\(p.appearance.number)").font(.display(18)).foregroundStyle(Color(hex: p.appearance.primary))
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(p.name.uppercased()).font(.display(22)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
+                Text("#\(p.appearance.number)").font(.display(16)).foregroundStyle(Color(hex: p.appearance.primary))
+                Text(formatValue(p.marketValue))
+                    .font(.display(26)).foregroundStyle(Theme.gold)
+                    .shadow(color: Theme.gold.opacity(0.5), radius: 10)
+                    .contentTransition(.numericText())
             }
-            Text(formatValue(p.marketValue))
-                .font(.display(34)).foregroundStyle(Theme.gold)
-                .shadow(color: Theme.gold.opacity(0.5), radius: 10)
-                .contentTransition(.numericText())
             Text("MARKET VALUE · " + Catalog.valueTitle(p.marketValue).uppercased())
                 .font(.label(10, .black)).tracking(1.5).foregroundStyle(.white.opacity(0.7))
             if let next = Catalog.nextValueMilestone(p.marketValue) {

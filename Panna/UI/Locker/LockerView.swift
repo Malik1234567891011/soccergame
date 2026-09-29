@@ -15,12 +15,14 @@ struct LockerView: View {
         ZStack {
             AppBackground(accent: Color(hex: draft.primary))
             HStack(spacing: 0) {
-                ZStack(alignment: .bottom) {
+                // Preview buttons sit under the platform, never across the footballer's boots.
+                VStack(spacing: 6) {
                     StageView(stage: stage)
+                        .padding(.top, 44)
                     HStack(spacing: 8) {
                         animButton("IDLE", .idle); animButton("RUN", .run); animButton("KICK", .kick); animButton("CELEBRATE", .celebrate)
                     }
-                    .padding(.bottom, 60)
+                    .padding(.bottom, 16)
                 }
                 .frame(width: 320)
                 VStack(alignment: .leading, spacing: 8) {
