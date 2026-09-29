@@ -284,6 +284,22 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         }
     }
 
+    /// QA: PANNA_SNAP_EVENTS=1 saves a screenshot ~0.7 s after big moments to Documents/snaps.
+    private static let snapEvents = ProcessInfo.processInfo.environment["PANNA_SNAP_EVENTS"] != nil
+    private var snapCount = 0
+    private func qaSnap(_ tag: String, delay: Double = 0.7) {
+        guard MatchController.snapEvents, snapCount < 30 else { return }
+        snapCount += 1
+        let n = snapCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard let win = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first else { return }
+            let img = UIGraphicsImageRenderer(bounds: win.bounds).image { _ in win.drawHierarchy(in: win.bounds, afterScreenUpdates: false) }
+            let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("snaps")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? img.jpegData(compressionQuality: 0.7)?.write(to: dir.appendingPathComponent(String(format: "%02d_%@.jpg", n, tag)))
+        }
+    }
+
     private func showCutIn(_ c: CutIn) {
         DispatchQueue.main.async {
             self.cutIn = c
@@ -315,6 +331,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             }
             if p == humanId { haptic(heavy) }
         case .goal(let team, let scorer, let assister, let own):
+            qaSnap("goal", delay: 0.5); qaSnap("celebration", delay: 2.2)
             hitstop = 0.18
             slowmo = 1.1; slowmoScale = 0.28
             audio.play(.net)
@@ -328,6 +345,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             banner(Banner(title: us || humanId < 0 ? "GOAL!" : "CONCEDED", subtitle: sub, color: us || humanId < 0 ? Color(hex: 0xFFD23B) : Color(hex: 0xFF3B5C), big: true))
             if humanId >= 0 { DispatchQueue.main.async { self.notify.notificationOccurred(us ? .success : .error) } }
         case .save(let k, _):
+            qaSnap("save", delay: 0.15)
             audio.play(.save)
             if isLocalTeam(k) { banner(Banner(title: "SAVED!", color: Color(hex: 0xE8FF3B))) }
         case .tackleWon(let t, let v, let slide):
@@ -338,6 +356,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         case .tackleMissed(let t, _):
             if t == humanId { haptic(light, 0.5) }
         case .nutmeg(let a, let v):
+            qaSnap("nutmeg", delay: 0.3)
             slowmo = 0.45; slowmoScale = 0.3
             audio.play(.panna)
             audio.play(.crowdOoh)
@@ -362,6 +381,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             audio.play(.tackle, volume: 0.6)
             if p == humanId { banner(Banner(title: "BLOCKED", color: Color(hex: 0x3BE8FF))) }
         case .flowStart(let p):
+            if p == humanId { qaSnap("flow", delay: 0.5); qaSnap("flowplay", delay: 2.5) }
             audio.play(.flow)
             audio.crowdSwell(0.6)
             if p == humanId {

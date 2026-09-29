@@ -371,8 +371,8 @@ final class MatchRenderer {
         var lookAt = SIMD3<Float>(focus.x, 0, focus.z + lookZOffset)
         if celebrationCam > 0, s.lastScorer >= 0 {
             let sp = s.players[s.lastScorer].pos
-            let cp = SIMD3<Float>(sp.x, 3.4, sp.y + 9.5)
-            let cl = SIMD3<Float>(sp.x, 1.1, sp.y)
+            let cp = SIMD3<Float>(sp.x, 4.2, sp.y + 13.5)
+            let cl = SIMD3<Float>(sp.x, 0.9, sp.y)
             let e = celebrationCam * celebrationCam * (3 - 2 * celebrationCam)
             targetPos = targetPos + (cp - targetPos) * e
             lookAt = lookAt + (cl - lookAt) * e
@@ -403,7 +403,7 @@ final class MatchRenderer {
         cameraNode.position = SCNVector3(pos.x, pos.y, pos.z)
         cameraNode.look(at: SCNVector3(camTarget.x + ox, camTarget.y + oy, camTarget.z))
         fovPunch = max(0, fovPunch - dt * 12)
-        camera.fieldOfView = CGFloat(25 + fovPunch - celebrationCam * 3)
+        camera.fieldOfView = CGFloat(25 + fovPunch)
         // Colour grade for flow / slow-mo.
         let humanFlow = human?.inFlow ?? false
         flowGrade += ((humanFlow ? 1 : 0) - flowGrade) * min(1, dt * 4)
@@ -412,7 +412,7 @@ final class MatchRenderer {
         camera.colorFringeStrength = CGFloat(0.4 + flowGrade * 1.2 + slowmoGrade * 1.5)
         camera.vignettingIntensity = CGFloat(0.55 + flowGrade * 0.35 + slowmoGrade * 0.3)
         camera.wantsDepthOfField = celebrationCam > 0.3
-        camera.focusDistance = 9.8
+        camera.focusDistance = 14
         camera.fStop = 2.8
     }
 

@@ -34,11 +34,11 @@ struct MatchScreen: View {
             SceneViewHost(controller: controller)
                 .ignoresSafeArea()
             MatchHUD(hud: controller.hud, banners: controller.banners, onPause: { controller.paused = true; showMenu = true })
+            if controller.hud.phase != .ended && controller.hud.phase != .goal && !showMenu && controller.humanId >= 0 {
+                MatchControls(input: controller.input, hud: controller.hud)
+            }
             if let c = controller.cutIn {
                 CutInView(cut: c).id(c.id).allowsHitTesting(false)
-            }
-            if controller.hud.phase != .ended && !showMenu && controller.humanId >= 0 {
-                MatchControls(input: controller.input, hud: controller.hud)
             }
             if showVS {
                 VersusCard(controller: controller)
