@@ -179,6 +179,8 @@ struct Profile: Codable {
     var passXP = 0
     var lookMigrated = false
     var momentStars: [String: Int] = [:]
+    var passPremium = false
+    var passPremiumClaimed: Set<Int> = []
     var passClaimed: Set<Int> = []
 
     // MARK: Derived
@@ -447,6 +449,19 @@ final class ProfileStore: ObservableObject {
         guard p.passXP / StreetPass.xpPerTier >= tier, !p.passClaimed.contains(tier) else { return }
         p.passClaimed.insert(tier)
         switch StreetPass.reward(tier) {
+        case .coins(let n): p.coins += n
+        case .gems(let n): p.gems += n
+        case .shards(let n): p.shards += n
+        case .pack: p.gems += ProfileStore.packCost
+        case .cosmetic(let id): p.unlocked.insert(id)
+        }
+        save()
+    }
+
+    func claimPremium(_ tier: Int) {
+        guard p.passPremium, p.passXP / StreetPass.xpPerTier >= tier, !p.passPremiumClaimed.contains(tier) else { return }
+        p.passPremiumClaimed.insert(tier)
+        switch StreetPass.premiumReward(tier) {
         case .coins(let n): p.coins += n
         case .gems(let n): p.gems += n
         case .shards(let n): p.shards += n

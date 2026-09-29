@@ -1,0 +1,21 @@
+{
+  "identifier" : "5E1F2A77",
+  "nonRenewingSubscriptions" : [ ],
+  "products" : [
+    { "displayPrice" : "0.99", "familyShareable" : false, "internalID" : "6500000001",
+      "localizations" : [ { "description" : "A handful of gems.", "displayName" : "320 Gems", "locale" : "en_US" } ],
+      "productID" : "com.malik.panna.gems.320", "referenceName" : "Gems 320", "type" : "Consumable" },
+    { "displayPrice" : "4.99", "familyShareable" : false, "internalID" : "6500000002",
+      "localizations" : [ { "description" : "A pouch of gems.", "displayName" : "1,800 Gems", "locale" : "en_US" } ],
+      "productID" : "com.malik.panna.gems.1800", "referenceName" : "Gems 1800", "type" : "Consumable" },
+    { "displayPrice" : "19.99", "familyShareable" : false, "internalID" : "6500000003",
+      "localizations" : [ { "description" : "A chest of gems.", "displayName" : "8,000 Gems", "locale" : "en_US" } ],
+      "productID" : "com.malik.panna.gems.8000", "referenceName" : "Gems 8000", "type" : "Consumable" },
+    { "displayPrice" : "7.99", "familyShareable" : false, "internalID" : "6500000004",
+      "localizations" : [ { "description" : "Premium Street Pass track for Season 1: exclusive cosmetics and gems.", "displayName" : "Street Pass Premium — S1", "locale" : "en_US" } ],
+      "productID" : "com.malik.panna.pass.s1", "referenceName" : "Pass S1", "type" : "NonConsumable" }
+  ],
+  "settings" : { "_applicationInternalID" : "6500000000", "_developerTeamID" : "", "_failTransactionsEnabled" : false, "_locale" : "en_US", "_storefront" : "USA", "_storeKitErrors" : [ ] },
+  "subscriptionGroups" : [ ],
+  "version" : { "major" : 3, "minor" : 0 }
+}

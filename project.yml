@@ -55,6 +55,8 @@ schemes:
       targets:
         Panna: all
         PannaTests: [test]
+    run:
+      storeKitConfiguration: Panna/Resources/Panna.storekit
     test:
       targets:
         - PannaTests

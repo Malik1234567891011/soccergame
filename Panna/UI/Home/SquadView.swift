@@ -299,7 +299,6 @@ struct ProfileView: View {
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .padding(.top, 50)
-            VStack { Spacer(); StreetPassView().frame(width: 760).padding(.bottom, 8) }
             VStack {
                 TopBar(title: nil, onBack: { app.go(.home) })
                 Spacer()
@@ -317,25 +316,81 @@ struct ProfileView: View {
 struct ShopView: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var store: ProfileStore
+    @StateObject private var shop = Shop()
+    @State private var tab = 0
+
     var body: some View {
         ZStack {
             AppBackground(accent: Theme.gold)
-            VStack(alignment: .leading, spacing: 12) {
-                Spacer().frame(height: 50)
-                Text("DAILY DROP").font(.display(24)).foregroundStyle(.white).padding(.leading, 24)
-                Text("New cosmetics every day. Earn coins by playing — no paywalls on gameplay.").font(.label(12)).foregroundStyle(.white.opacity(0.65)).padding(.leading, 24)
-                HStack(spacing: 14) {
-                    ForEach(store.p.shop, id: \.self) { id in
-                        if let it = Cosmetics.item(id) { shopCard(it) }
-                    }
+            VStack(alignment: .leading, spacing: 10) {
+                Spacer().frame(height: 52)
+                HStack(spacing: 8) {
+                    tabChip("DAILY DROP", 0); tabChip("STREET PASS", 1); tabChip("GEMS", 2)
+                    Spacer()
+                    if !shop.status.isEmpty { Text(shop.status).font(.label(11, .black)).foregroundStyle(Theme.gold) }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 40)
+                switch tab {
+                case 0:
+                    Text("New cosmetics every day. Earn coins by playing — nothing here changes how you play.").font(.label(12)).foregroundStyle(.white.opacity(0.65)).padding(.horizontal, 40)
+                    HStack(spacing: 14) {
+                        ForEach(store.p.shop, id: \.self) { id in
+                            if let it = Cosmetics.item(id) { shopCard(it) }
+                        }
+                    }
+                    .padding(.horizontal, 40)
+                case 1:
+                    VStack(alignment: .leading, spacing: 8) {
+                        StreetPassView()
+                        HStack {
+                            Text(store.p.passPremium ? "PREMIUM ACTIVE" : "PREMIUM TRACK: exclusive durag, goggles, high-tops, neon trail + gems").font(.label(11, .black)).foregroundStyle(Theme.gold)
+                            Spacer()
+                            if !store.p.passPremium, let pp = shop.products.first(where: { $0.id == Shop.passID }) {
+                                GlowButton(title: "UNLOCK " + pp.displayPrice, icon: "crown.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 42) { Task { await shop.buy(pp) } }
+                                    .frame(width: 220)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 40)
+                default:
+                    HStack(spacing: 14) {
+                        ForEach(shop.products.filter { $0.id != Shop.passID }, id: \.id) { p in
+                            VStack(spacing: 8) {
+                                Image(systemName: "diamond.fill").font(.system(size: 34 + CGFloat(Shop.gemAmounts[p.id] ?? 0) / 500, weight: .bold)).foregroundStyle(Theme.cyan)
+                                Text("\(Shop.gemAmounts[p.id] ?? 0) GEMS").font(.display(20)).foregroundStyle(.white)
+                                GlowButton(title: p.displayPrice, colors: [Theme.cyan, Color(hex: 0x1FA8C8)], height: 44) { Task { await shop.buy(p) } }
+                                    .frame(width: 150)
+                            }
+                            .padding(14)
+                            .frame(width: 190, height: 200)
+                            .background(Skew(amount: 12).fill(Theme.panel))
+                        }
+                        if shop.products.isEmpty {
+                            Text("Store unavailable right now.").font(.label(13)).foregroundStyle(.white.opacity(0.6))
+                        }
+                    }
+                    .padding(.horizontal, 40)
+                    Button("Restore purchases") { Task { await shop.restore() } }.font(.label(11, .black)).foregroundStyle(.white.opacity(0.5)).padding(.horizontal, 40)
+                }
                 Spacer()
             }
             VStack {
                 TopBar(title: "SHOP", onBack: { app.go(.home) })
                 Spacer()
             }
+        }
+        .onAppear {
+            shop.store = store
+            Task { await shop.load() }
+            if ProcessInfo.processInfo.environment["PANNA_SHOPTAB"] == "pass" { tab = 1 }
+        }
+    }
+
+    func tabChip(_ t: String, _ i: Int) -> some View {
+        Button { tab = i; AudioEngine.shared.play(.uiTap, volume: 0.5) } label: {
+            Text(t).font(.display(14)).foregroundStyle(tab == i ? .black : .white)
+                .padding(.horizontal, 14).frame(height: 34)
+                .background(Skew(amount: 8).fill(tab == i ? Theme.gold : Theme.panel))
         }
     }
 

@@ -37,6 +37,14 @@ enum StreetPass {
         }
     }
 
+    /// Premium track: pays back more gems than it costs, plus cosmetics. Never gameplay power.
+    static func premiumReward(_ tier: Int) -> Reward {
+        if tier % 10 == 0 { return .cosmetic(["head.durag", "acc.goggles", "boots.highTop", "trail.FF3BD4"][tier / 10 - 1]) }
+        if tier % 5 == 0 { return .pack }
+        if tier % 2 == 0 { return .gems(40) }
+        return .shards(30)
+    }
+
     static func reward(_ tier: Int) -> Reward {
         if tier == tiers { return .cosmetic("trail.FFFFFF") }
         if tier % 10 == 0 { return .cosmetic(["boots.glow", "acc.mask", "pattern.checker"][tier / 10 - 1]) }
@@ -49,6 +57,27 @@ enum StreetPass {
 
 struct StreetPassView: View {
     @EnvironmentObject var store: ProfileStore
+
+    func premiumCell(_ t: Int, reached: Bool) -> some View {
+        let r = StreetPass.premiumReward(t)
+        let claimed = store.p.passPremiumClaimed.contains(t)
+        let unlocked = store.p.passPremium
+        return Button {
+            guard unlocked, reached, !claimed else { return }
+            store.claimPremium(t)
+            AudioEngine.shared.play(.reward)
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: !unlocked ? "lock.fill" : (claimed ? "checkmark.circle.fill" : r.icon)).font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(claimed ? Theme.green : Theme.gold)
+                Text(r.label).font(.label(7, .black)).foregroundStyle(.white).lineLimit(2).multilineTextAlignment(.center)
+            }
+            .frame(width: 64, height: 60)
+            .background(RoundedRectangle(cornerRadius: 10).fill(LinearGradient(colors: [Theme.gold.opacity(unlocked && reached && !claimed ? 0.35 : 0.12), Theme.panel], startPoint: .top, endPoint: .bottom)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.gold.opacity(0.35)))
+        }
+        .buttonStyle(PressStyle())
+    }
     var body: some View {
         let tier = store.p.passXP / StreetPass.xpPerTier
         let frac = Double(store.p.passXP % StreetPass.xpPerTier) / Double(StreetPass.xpPerTier)
@@ -86,14 +115,24 @@ struct StreetPassView: View {
                                 .opacity(reached ? 1 : 0.55)
                             }
                             .buttonStyle(PressStyle())
+                            .overlay(alignment: .bottom) { EmptyView() }
+                            .modifier(PremiumStack(premium: premiumCell(t, reached: reached)))
                             .id(t)
                         }
                     }
                 }
                 .onAppear { proxy.scrollTo(max(1, tier), anchor: .center) }
+                .frame(height: 150)
             }
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel.opacity(0.9)))
+    }
+}
+
+struct PremiumStack<P: View>: ViewModifier {
+    let premium: P
+    func body(content: Content) -> some View {
+        VStack(spacing: 6) { content; premium }
     }
 }
