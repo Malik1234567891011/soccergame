@@ -539,6 +539,7 @@ final class ProfileStore: ObservableObject {
             else { rarity = .common }
             if guaranteedEpic && i == count - 1 && rarity < .epic { rarity = .epic }
             if p.totalPulls == 1 && rarity < .epic { rarity = .epic }   // first ever pull always delights
+            if ProcessInfo.processInfo.environment["PANNA_FORCEPROSPECT"] != nil && rarity < .epic { rarity = .epic }
             if rarity >= .epic { guaranteedEpic = false; p.pityEpic = 0 }
             if rarity == .legendary { p.pity = 0 }
             out.append(grant(rarity))
@@ -557,7 +558,8 @@ final class ProfileStore: ObservableObject {
         // 30% prospects, 70% legacies at epic+; rares are mostly legacies.
         let prospects = Catalog.prospects.filter { $0.rarity == rarity }
         let legacies = Catalog.legacies.filter { $0.rarity == rarity }
-        let pickProspect = !prospects.isEmpty && Double.random(in: 0..<1) < (rarity == .rare ? 0.2 : 0.3)
+        let forced = ProcessInfo.processInfo.environment["PANNA_FORCEPROSPECT"] != nil   // QA: walkout reveal
+        let pickProspect = !prospects.isEmpty && (forced || Double.random(in: 0..<1) < (rarity == .rare ? 0.2 : 0.3))
         if pickProspect, let pr = prospects.randomElement() {
             pull.prospect = pr.id
             let have = p.prospects[pr.id] ?? 0

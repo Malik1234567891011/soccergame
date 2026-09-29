@@ -24,6 +24,7 @@ struct ScoutView: View {
                     LinearGradient(colors: [.clear, .black.opacity(0.95)], startPoint: .center, endPoint: .bottom)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("FEATURED SCOUT").font(.label(11, .black)).tracking(2).foregroundStyle(Theme.gold)
+                            .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(.black.opacity(0.55)))
                         Text(f.name).font(.display(40)).foregroundStyle(.white)
                         Text("\(f.nation.uppercased()) · \(f.title.uppercased()) · \(f.playstyle.rawValue.uppercased())").font(.label(12, .black)).foregroundStyle(Color(hex: f.aura))
                         Text("“\(f.quote)”").font(.label(12)).italic().foregroundStyle(.white.opacity(0.8))
@@ -224,16 +225,14 @@ struct PackReveal: View {
             if phase == 3 {
                 HStack(spacing: 30) {
                     if let pid = p.prospect, let pr = Catalog.prospect(pid), pr.model != nil {
-                        ZStack(alignment: .bottomLeading) {
-                            StageView(stage: walkout).frame(width: 220, height: 330)
-                            card(p, width: 86).offset(x: -10, y: 10)
-                        }
+                        // Full walkout in frame, jumps included; the card sits with the text, not over the boots.
+                        StageView(stage: walkout).frame(width: 240, height: 340)
                         .onAppear {
                             walkout.setCharacters([(pr.appearance, pr.name, pr.model)])
                             walkout.animation = .celebrate
                             walkout.yaw = 0.2
-                            walkout.camera.position = SCNVector3Make(0, 1.1, 4.6)
-                            walkout.camera.look(at: SCNVector3Make(0, 0.95, 0))
+                            walkout.camera.position = SCNVector3Make(0, 1.3, 6.4)
+                            walkout.camera.look(at: SCNVector3Make(0, 1.2, 0))
                         }
                     } else {
                     card(p, width: 190)
@@ -241,6 +240,7 @@ struct PackReveal: View {
                         .rotation3DEffect(.degrees(burst ? 0 : 180), axis: (0, 1, 0))
                     }
                     VStack(alignment: .leading, spacing: 8) {
+                        if let pid = p.prospect, Catalog.prospect(pid)?.model != nil { card(p, width: 86) }
                         RarityBadge(rarity: p.rarity)
                         Text(title(p)).font(.display(34)).foregroundStyle(.white)
                         Text(detail(p)).font(.label(13)).foregroundStyle(.white.opacity(0.8)).frame(width: 280, alignment: .leading)
@@ -280,7 +280,7 @@ struct PackReveal: View {
     func detail(_ p: ProfileStore.Pull) -> String {
         if let pid = p.prospect { let pr = Catalog.prospect(pid)!; return "\(pr.title) — \(pr.playstyle.rawValue.capitalized). “\(pr.quote)”" }
         if let lid = p.legacy { return Catalog.legacy(lid)!.blurb }
-        return "Street money."
+        return p.coins > 0 ? "Street money. Spend it in the shop." : "Trade shards for the Legacy you want in the Shard Exchange."
     }
 
     @ViewBuilder

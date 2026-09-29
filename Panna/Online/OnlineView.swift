@@ -112,7 +112,7 @@ struct OnlineBody: View {
         case .offline: return "OFFLINE"
         case .connecting: return "CONNECTING…"
         case .online, .inRoom, .queued, .playing:
-            return "ONLINE · \(client.onlineCount) players · your RP \(client.serverRP ?? store.p.rp)"
+            return "ONLINE · \(client.onlineCount) player\(client.onlineCount == 1 ? "" : "s") · your RP \(client.serverRP ?? store.p.rp)"
         }
     }
 
