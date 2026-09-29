@@ -277,6 +277,7 @@ extension MatchSim {
                 brain.decisionT = reaction + rng.range(0, 0.12)
                 decideDefence(i, carrier: owner, &brain)
             }
+            if brain.pressing { containTarget(i, carrier: owner, &brain) }
             if brain.pressTackle { brain.pressTackle = false; frame.buttons.insert(.shoot) }
             if brain.pressSlide { brain.pressSlide = false; frame.buttons.insert(.skill) }
             steer(p, &frame, &brain)
@@ -420,7 +421,7 @@ extension MatchSim {
         var bestTarget = V2.zero
         var bestSafety: Float = 0
         // Bots will try a risky ball when the payoff is big; weaker bots misread lanes more often.
-        let minSafe: Float = 0.08 + skill * 0.1
+        let minSafe: Float = 0.11 + skill * 0.1
         for m in state.players where m.team == p.team && m.id != i && !m.isKeeper && !disabledPlayers.contains(m.id) && !m.busy {
             if length(m.pos - p.pos) < 2.5 { continue }
             var plan = passPlan(from: p, to: m, lofted: false)
@@ -638,10 +639,7 @@ extension MatchSim {
             // Presser: goal-side of the carrier.
             brain.pressing = true
             brain.urgent = true
-            let gs = normalized(own - c.pos)
-            let hold: Float = 1.5
-            brain.target = c.pos + gs * hold + c.vel * 0.15
-            brain.sprint = length(c.pos - p.pos) > 3
+            containTarget(i, carrier: carrier, &brain)
             let d = length(c.pos - p.pos)
             let ballExposed = length(xz(state.ball.pos) - c.pos) > 0.72
             let facingAway = dot(c.facingDir, normalized(p.pos - c.pos)) < -0.2
@@ -686,6 +684,20 @@ extension MatchSim {
             brain.target = geo.clampInside(spaced(brain.target, i: i, minDist: 2.5), inset: 1.2)
             brain.sprint = length(brain.target - p.pos) > 3
         }
+    }
+
+    /// The presser's spot, refreshed every frame (not just at decision time): goal-side on the carrier's line to
+    /// goal, matching the carrier's run (better defenders read it further ahead) and sprinting to keep pace, so a
+    /// dribbler can't simply curve around him. Beating a set defender takes a skill move, a feint or a burst.
+    func containTarget(_ i: Int, carrier: Int, _ brain: inout AIBrain) {
+        let p = state.players[i]
+        let c = state.players[carrier]
+        let own = geo.ownGoal(team: p.team)
+        let skill = aiSkill(p)
+        let gs = normalized(own - c.pos)
+        let hold: Float = 1.5
+        brain.target = c.pos + gs * hold + c.vel * (skill * 0.15)
+        brain.sprint = length(c.pos - p.pos) > 3 || length(c.vel) > jogSpeed(p) + 0.2
     }
 
     // MARK: Loose ball

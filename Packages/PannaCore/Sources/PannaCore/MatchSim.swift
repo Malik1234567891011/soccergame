@@ -780,6 +780,14 @@ public final class MatchSim {
             let open = laneOpenness(from: p.pos, to: m.pos, team: p.team)
             let fwd = clampf(to.x * s / 15, -1, 1)
             var score = 0.5 * (1 - ang / cone) + 0.3 * open + 0.2 * fwd - d / 60
+            if p.isHuman && lengthSq(aim) <= 0.01 && forceTarget == nil {
+                // Tap pass (no aim drag): the assist picks the mate in the stick's direction whose pass will
+                // actually arrive (same race model the bots use), so a new player's taps aren't gifts.
+                // A dragged aim is taken literally: that's where the skill (and the risk) is.
+                let plan = passPlan(from: p, to: m, lofted: lofted, oneTouch: oneTouch)
+                let safe = passSafety(from: p.pos, to: plan.target, time: plan.time, team: p.team, lofted: lofted)
+                score = 0.3 * (1 - ang / cone) + 0.6 * safe + 0.2 * fwd - d / 60
+            }
             if m.isHuman { score += 0.12 }
             if forceTarget == m.id { score += 10 }
             if score > bestScore { bestScore = score; best = m.id }
@@ -937,6 +945,19 @@ public final class MatchSim {
             state.ball = b
             state.players[i].touchCooldown = 0.3
         }
+        // Timing matters: a skill move with nobody to beat is a heavy touch (the ball runs ahead, anyone can nick
+        // it), and every move costs a little sprint. Tricks are for beating a man, not for spamming in space.
+        let nearestOpp = candidates.map { length($0.pos - p.pos) }.min() ?? 99
+        if tech != .rainbow && !didNutmeg && !beatOne && nearestOpp > 3.0 && !showtime {
+            var b = state.ball
+            b.owner = -1
+            b.vel = V3(burst.x * 5.5, 0.3, burst.y * 5.5)
+            b.lastTouch = i
+            b.passFrom = -1
+            state.ball = b
+            state.players[i].touchCooldown = 0.22
+        }
+        if !showtime { state.players[i].stamina = max(0, state.players[i].stamina - 0.08) }
         if showtime && beatOne {
             for m in state.players where m.team == p.team && m.id != i && !m.isKeeper { addHypeRaw(m.id, 8) }
         }
@@ -1461,6 +1482,8 @@ public final class MatchSim {
                 if sh.inFlow && sh.loadout.playstyle == .finisher { reaction += 0.15 }
             }
             if b.perfectShot && abs(interceptZ) > geo.shape.goalHalfWidth * 0.55 { reaction += 0.3 }
+            // Placement pays even without the perfect strike: a ball tucked into the corner is a late read.
+            else if abs(interceptZ) > geo.shape.goalHalfWidth * 0.7 { reaction += 0.16 }
             if kb.threatT >= reaction {
                 let targetZ = clampf(interceptZ, -geo.shape.goalHalfWidth - 0.3, geo.shape.goalHalfWidth + 0.3)
                 let dz = targetZ - p.pos.y
