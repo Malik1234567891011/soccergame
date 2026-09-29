@@ -1,5 +1,39 @@
 # PANNA — report
 
+## Round 3: your playtest notes — 2026-09-29
+Each item was checked in the simulator by screenshot or recording.
+
+- **Arms dragging the shorts:** fixed. The shorts were skinned to the hand bones; they now follow the hips. Checked in every animation.
+- **Faces:** eye whites and ghost eyes are fixed. Profile views that don't fit a character's head are now dropped automatically (Amara was the worst case).
+- **Locked footballers:** all 10 redesigned as legend-inspired personas (street nicknames, no real names):
+  - Rare: **El Mago**, **La Reina**, **Bulldozer**, **La Pulga**, **The Wall**.
+  - Epic: **Le Maestro**, **El Fenómeno**, **Flash**.
+  - Legendary: **The Machine**, **Egoist**.
+  - Each has gacha card art with an aura. Tap a locked one to get the card plus a 3D try-on in your kit.
+  - Looks are cosmetic. Prospects (the Scout characters) have stats and play as your teammates.
+- **Play as a Prospect:** any Prospect you own (e.g. Luna) can be selected as *you* in Locker → Look → "Play as a Prospect".
+- **Scout clarity:** "What's inside" lists every item with its exact odds and explains Prospects vs Legacies.
+- **Maps:**
+  - Paris had a roof hiding the entire match; fixed.
+  - Quick Match and the Gauntlet now rotate all 8 cities from day one. Career still travels city by city, which is why you only saw London.
+- **CALL on defence** is now **PRESS**: a teammate jumps the carrier with you.
+- **Gauntlet:** Abandon asks for confirmation, and your perks are tappable to see what they do.
+- **Reason to pass:**
+  - **Chemistry.** Goals you build with a Prospect teammate (they assist you or you assist them) grow your Bond with them.
+  - Higher Bond makes them play a bit better with you. It shows after each match and in Squad.
+  - Solo play is never punished; combining is rewarded.
+- **Sound:**
+  - Street hype shouts in English, French and Spanish: "COOK HIM!", "C'est filmé!", "Wesh…", "¡Caño!", "GOLAZO!", "Ankles gone!" and more. They're rate-limited so they stay special.
+  - The perfect-strike "ring" is replaced by a heavy anime power-strike, and Flow-ready by a charge shing.
+- **Skill gap** (docs/SKILL_GAP.md):
+  - Experts beat novices 83–99%.
+  - Tackles are decided by timing and angle, not dice.
+  - Defenders jockey, so running around them now works 16% of the time instead of 91%.
+  - Pointless skill moves cost a heavy touch.
+  - Collection gear is worth almost nothing in ranked.
+- **Save safety:** found and fixed a bug where any update adding a profile field would silently reset your progress.
+
+
 ## Round 2: your feedback (UI pass, characters, AI, kits) — 2026-09-29
 Every item was verified by looking at renders and recordings, not just code metrics. The QA tools are listed at the end of this section.
 
