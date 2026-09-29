@@ -127,6 +127,14 @@ def load_view(path, keep_face=False):
     img = bpy.data.images.load(os.path.abspath(path))
     w, h = img.size
     px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)  # bottom-up rows
+    # Paper-grain sheets: an edge-preserving 3x3 median kills the grain (which speckles recolours and skin)
+    # while keeping line art crisp. Clean sheets are left untouched.
+    corner = px[:24, :24, :3].reshape(-1, 3)
+    if float(np.abs(corner - np.median(corner, 0)).sum(1).mean()) > 0.018:
+        for _ in range(2):
+            stack = np.stack([np.roll(np.roll(px[:, :, :3], dy, 0), dx, 1) for dy in (-1, 0, 1) for dx in (-1, 0, 1)], 0)
+            px[:, :, :3] = np.median(stack, 0)
+        print('VIEW', os.path.basename(path), 'grain removed')
     bg = np.median(np.concatenate([px[:8, :8, :3].reshape(-1, 3), px[-8:, -8:, :3].reshape(-1, 3), px[:8, -8:, :3].reshape(-1, 3)]), axis=0)
     diff = np.abs(px[:, :, :3] - bg).sum(axis=2)
     # Background = bg-coloured pixels connected to the image border. Enclosed pale areas (eye whites, silver
@@ -243,7 +251,10 @@ def kit_calibration(col, mask):
     blue = med(band(0.44, 0.52, 0.12, lambda h, s_, v: s_ > 0.35 and 0.5 < h < 0.8))
     green = med(band(0.06, 0.22, 0.3, lambda h, s_, v: s_ > 0.3 and 0.2 < h < 0.55))
     skin = med(band(0.86, 0.9, 0.05, lambda h, s_, v: s_ > 0.15 and v > 0.12 and h < 0.15))
-    return {'red': red, 'blue': blue, 'green': green, 'skin': skin}
+    # Trim (collar / cuffs): the golden-yellow cluster on the upper torso and sleeves.
+    yellow = med(band(0.7, 0.8, 0.3, lambda h, s_, v: s_ > 0.45 and v > 0.4 and 0.085 < h < 0.19))
+    if yellow and abs(yellow[0] - 0.14) > 0.045: yellow = None   # that was hair, not trim
+    return {'red': red, 'blue': blue, 'green': green, 'skin': skin, 'yellow': yellow}
 
 views = {}
 view_px = {}
@@ -278,7 +289,8 @@ def build_cloth(key, cal):
     dr = np.abs(hue - (redh % 1.0)); dr = np.minimum(dr, 1 - dr)
     ok = (sat > 0.4) & (mx_ > 0.12)
     red = ok & (dr < tol)
-    yel = ok & (np.abs(hue - 0.14) < 0.035)
+    yh = (cal.get('yellow') or (0.14, 0))[0]
+    yel = (sat > 0.3) & (mx_ > 0.3) & (np.abs(hue - yh) < 0.035)
     blu = (sat > 0.25) & (mx_ > 0.08) & (np.abs(hue - ((cal.get('blue') or (0.63, 0))[0])) < 0.12)
     grn = (sat > 0.25) & (mx_ > 0.08) & (np.abs(hue - ((cal.get('green') or (0.37, 0))[0])) < 0.14)
     def dil(m_, n):

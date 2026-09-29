@@ -7,7 +7,7 @@ enum KitRecolor {
 
     /// Hues measured from each character's own code-kit sheet at bake time (<id>_kit.json).
     struct Calibration {
-        var red: Float = 0.0, blue: Float = 0.63, green: Float = 0.37
+        var red: Float = 0.0, blue: Float = 0.63, green: Float = 0.37, yellow: Float = 0.14
         var skinHue: Float = 0.07, skinSat: Float = 0.4
         static let `default` = Calibration()
         static func load(_ d: Data) -> Calibration? {
@@ -20,6 +20,7 @@ enum KitRecolor {
             if let r = pair("red") { c.red = r.0 }
             if let b = pair("blue") { c.blue = b.0 }
             if let g = pair("green") { c.green = g.0 }
+            if let y = pair("yellow") { c.yellow = y.0 }
             if let s = pair("skin") { c.skinHue = s.0; c.skinSat = s.1 }
             return c
         }
@@ -96,7 +97,7 @@ enum KitRecolor {
                     let satR = max(satW, smooth(0.14, 0.28, sat) * smooth(0.06, 0.16, mx) * region * (1 - smooth(tolRe * 0.5, tolRe * 0.9, dRed)))
                     let wRed = (1 - smooth(tolRe, tolRe + 0.012, dRed)) * satR
                     let tolY = 0.028 + 0.03 * loose
-                    let wYel = (1 - smooth(tolY, tolY + 0.014, abs(hue - 0.14))) * satW
+                    let wYel = (1 - smooth(tolY, tolY + 0.014, abs(hue - cal.yellow))) * satW
                     // Blue shorts / green socks sit far from skin and hair hues, so faded paint is caught too.
                     let satC = smooth(0.1, 0.24, sat) * smooth(0.04, 0.1, mx) * region
                     let wBlu = (1 - smooth(0.1, 0.14, abs(hue - cal.blue))) * satC
