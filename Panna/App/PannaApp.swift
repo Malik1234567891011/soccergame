@@ -3,9 +3,13 @@ import PannaCore
 
 @main
 struct PannaApp: App {
-    @StateObject private var app = AppModel()
+    @StateObject private var store: ProfileStore
+    @StateObject private var app: AppModel
 
     init() {
+        let s = ProfileStore()
+        _store = StateObject(wrappedValue: s)
+        _app = StateObject(wrappedValue: AppModel(store: s))
         AudioEngine.shared.start()
     }
 
@@ -13,6 +17,7 @@ struct PannaApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(app)
+                .environmentObject(store)
                 .preferredColorScheme(.dark)
         }
     }

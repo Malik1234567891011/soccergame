@@ -121,8 +121,13 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
     private let medium = UIImpactFeedbackGenerator(style: .medium)
     private let light = UIImpactFeedbackGenerator(style: .light)
     private let notify = UINotificationFeedbackGenerator()
-    /// Full event log for post-match stats / highlights.
-    private(set) var log: [(Float, MatchEvent)] = []
+    /// Full event log for post-match stats / highlights. Written on the render thread; read via `log`.
+    private var _log: [(Float, MatchEvent)] = []
+    private var _state = MatchState()
+    private let lock = NSLock()
+    var log: [(Float, MatchEvent)] { lock.lock(); defer { lock.unlock() }; return _log }
+    /// Thread-safe copy of the latest match state for UI code on the main thread.
+    var state: MatchState { lock.lock(); defer { lock.unlock() }; return _state }
 
     init(driver: MatchDriver, renderer: MatchRenderer, playerNames: [String], flowName: String) {
         self.driver = driver
@@ -130,6 +135,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         self.humanId = driver.localPlayer
         self.playerNames = playerNames
         self.flowName = flowName
+        self._state = driver.state
         super.init()
         hud.teamNames = driver.state.teamNames
         hud.flowName = flowName
@@ -151,11 +157,14 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             events = driver.advance(dt: dt, input: frame, timeScale: slowmo > 0 ? slowmoScale : max(slowmoScale, 0.2))
         }
         let s = driver.state
+        lock.lock()
+        _state = s
+        for e in events { _log.append((s.time, e)) }
+        lock.unlock()
         for e in events {
             react(e, s)
             renderer.handle(e, state: s)
             onEvent?(e, s)
-            log.append((s.time, e))
         }
         renderer.slowmoGrade += ((slowmo > 0 ? 1 : 0) - renderer.slowmoGrade) * min(1, dt * 8)
         let human = humanId >= 0 ? s.players[humanId] : nil

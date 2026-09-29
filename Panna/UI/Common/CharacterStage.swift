@@ -15,7 +15,7 @@ final class CharacterStage: NSObject, SCNSceneRendererDelegate, ObservableObject
     var turntable = true
     var yaw: Float = 0
 
-    init(background: UIColor = UIColor(hex: 0x0B0D18), floorColor: UIColor = UIColor(hex: 0x151827)) {
+    init(background: UIColor = UIColor(hex: 0x0B0D18), floorColor: UIColor = UIColor(hex: 0x151827), floor: Bool = true) {
         super.init()
         scene.background.contents = background
         let cam = SCNCamera()
@@ -34,10 +34,10 @@ final class CharacterStage: NSObject, SCNSceneRendererDelegate, ObservableObject
         disc.materials = [Mat.pbr(floorColor, rough: 0.6, rim: 0)]
         let dn = SCNNode(geometry: disc)
         dn.position.y = -0.02
-        scene.rootNode.addChildNode(dn)
+        if floor { scene.rootNode.addChildNode(dn) }
         let ring = Geo.node(Geo.ring(inner: 1.05, outer: 1.12), Mat.emissive(UIColor(hex: 0x39FF88), intensity: 1.6))
         ring.position.y = 0.005
-        scene.rootNode.addChildNode(ring)
+        if floor { scene.rootNode.addChildNode(ring) }
         let amb = SCNLight(); amb.type = .ambient; amb.intensity = 400
         let an = SCNNode(); an.light = amb; scene.rootNode.addChildNode(an)
         let key = SCNLight(); key.type = .directional; key.intensity = 1200; key.castsShadow = true
