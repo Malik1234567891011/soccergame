@@ -6,6 +6,7 @@ struct Participant {
     var setup: PlayerSetup
     var appearance: Appearance
     var celebration: Int
+    var model: String? = nil
 }
 
 struct MatchSpec {
@@ -22,6 +23,7 @@ struct MatchSpec {
     var rules = MatchRules()
     var humanId: Int = 0
     var seed: UInt64 = UInt64.random(in: 1...UInt64.max)
+    var homeMods = TeamMods()
 }
 
 enum MatchFactory {
@@ -32,7 +34,8 @@ enum MatchFactory {
 
     @MainActor
     static func offline(_ spec: MatchSpec) -> MatchController {
-        let home = teamSetup(spec.home, name: spec.homeName, color: spec.homeColor, ai: spec.homeAISkill, keeper: spec.keeperSkill[0])
+        var home = teamSetup(spec.home, name: spec.homeName, color: spec.homeColor, ai: spec.homeAISkill, keeper: spec.keeperSkill[0])
+        home.mods = spec.homeMods
         let away = teamSetup(spec.away, name: spec.awayName, color: spec.awayColor, ai: spec.awayAISkill, keeper: spec.keeperSkill[1])
         let sim = MatchSim(home: home, away: away, rules: spec.rules, seed: spec.seed)
         return controller(driver: OfflineDriver(sim: sim, localPlayer: spec.humanId), spec: spec)
@@ -45,7 +48,7 @@ enum MatchFactory {
         for (t, team) in [spec.home, spec.away].enumerated() {
             for i in 0..<3 {
                 let p = team[min(i, team.count - 1)]
-                infos.append(RenderPlayerInfo(appearance: p.appearance, celebration: p.celebration, name: p.setup.name))
+                infos.append(RenderPlayerInfo(appearance: p.appearance, celebration: p.celebration, name: p.setup.name, model: p.model))
                 names.append(p.setup.name)
             }
             var k = Appearance()

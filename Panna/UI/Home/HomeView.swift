@@ -68,8 +68,8 @@ struct HomeView: View {
                     HStack(spacing: 10) {
                         ModeTile(title: "CAREER", detail: careerDetail, icon: "map.fill", color: Theme.pink) { app.go(.career) }
                         ModeTile(title: "ONLINE", detail: "PvP · Co-op", icon: "globe", color: Theme.cyan) { app.go(.online) }
-                        ModeTile(title: "RANKED", detail: p.rankName, icon: "shield.lefthalf.filled", color: Color(hex: Catalog.tierColors[p.tierIndex])) {
-                            app.play(.ranked)
+                        ModeTile(title: "SELECTION", detail: p.selection != nil ? "Round \(p.selection!.round)" : "Best \(p.selectionBest)", icon: "flame.fill", color: Theme.gold) {
+                            app.go(.selection)
                         }
                     }
                     .frame(width: 330)
@@ -239,6 +239,7 @@ struct PlayMenu: View {
                 Text("CHOOSE YOUR GAME").font(.display(30)).foregroundStyle(.white)
                 HStack(spacing: 14) {
                     card("CAREER", "The Road — 8 cities, 48 matches, bosses to recruit", "map.fill", Theme.pink) { app.showPlayMenu = false; app.go(.career) }
+                    card("THE SELECTION", "Endless gauntlet. Pick EGO perks. 3 lives. Best: \(store.p.selectionBest)", "flame.fill", Theme.gold) { app.showPlayMenu = false; app.go(.selection) }
                     card("QUICK MATCH", "3v3 vs a street crew. Bots adapt to you.", "bolt.fill", Theme.green) { app.showPlayMenu = false; app.play(.quick) }
                     card("RANKED", "\(store.p.rankName) · climb the ladder", "shield.lefthalf.filled", Color(hex: Catalog.tierColors[store.p.tierIndex])) { app.showPlayMenu = false; app.play(.ranked) }
                     card("ONLINE", "PvP & Co-op with real players", "globe", Theme.cyan) { app.showPlayMenu = false; app.go(.online) }
@@ -262,7 +263,7 @@ struct PlayMenu: View {
                 Text(sub).font(.label(11)).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.leading)
             }
             .padding(16)
-            .frame(width: 170, height: 170, alignment: .leading)
+            .frame(width: 150, height: 170, alignment: .leading)
             .background(Skew(amount: 16).fill(LinearGradient(colors: [color.opacity(0.35), Theme.panel], startPoint: .top, endPoint: .bottom)))
             .overlay(Skew(amount: 16).stroke(color.opacity(0.7), lineWidth: 1.5))
             .shadow(color: color.opacity(0.35), radius: 16)

@@ -58,6 +58,8 @@ struct Prospect: Identifiable, Hashable {
     let aura: UInt32
 
     var portrait: String { "prospect_" + id }
+    /// Painted AI-mesh model if one has been built for this Prospect (art/blender/unique.py).
+    var model: String? { CharacterModel.exists(id) ? id : nil }
 }
 
 // MARK: - Career

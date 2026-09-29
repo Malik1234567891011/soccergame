@@ -39,6 +39,9 @@ public final class MatchSim {
             k.stats.defending = team.keeperSkill
             players.append(k)
         }
+        for i in players.indices where !players[i].isKeeper {
+            players[i].hype = min(100, [home, away][players[i].team].mods.startHype)
+        }
         state.players = players
         state.teamNames = [home.name, away.name]
         for i in 0..<8 { brains[i].reactionScale = 1 }
@@ -223,7 +226,8 @@ public final class MatchSim {
     // MARK: - Derived physical values
 
     func jogSpeed(_ p: PlayerState) -> Float { 5.2 + p.stats.pace * 0.9 }
-    func sprintSpeed(_ p: PlayerState) -> Float { jogSpeed(p) + 1.7 + p.stats.pace * 0.4 }
+    func sprintSpeed(_ p: PlayerState) -> Float { (jogSpeed(p) + 1.7 + p.stats.pace * 0.4) * mods(p).sprint }
+    func mods(_ p: PlayerState) -> TeamMods { teams[p.team].mods }
     func pickupRadius(_ p: PlayerState) -> Float {
         if p.inFlow { return 1.5 }
         return p.isHuman ? 1.15 : 0.95
@@ -253,7 +257,7 @@ public final class MatchSim {
 
         if pressed.contains(.flow) && p.hype >= 100 && !p.inFlow {
             state.players[i].hype = 0
-            state.players[i].flowT = 8
+            state.players[i].flowT = 8 + mods(p).flowDuration
             emit(.flowStart(player: i))
         }
 
@@ -378,7 +382,7 @@ public final class MatchSim {
 
         if accel > 0 { p.vel = approach(p.vel, desired, accel * dt) }
         if sprinting && !(p.inFlow && p.loadout.playstyle == .winger) {
-            p.stamina = max(0, p.stamina - dt * (p.loadout.trait == .engine ? 0.14 : 0.2))
+            p.stamina = max(0, p.stamina - dt * (p.loadout.trait == .engine ? 0.14 : 0.2) * mods(p).staminaDrain)
         } else {
             p.stamina = min(1, p.stamina + dt * 0.16)
         }
@@ -451,7 +455,7 @@ public final class MatchSim {
         let dim: Float = repeats == 0 ? 1 : (repeats == 1 ? 0.5 : 0.25)
         let deficit = max(0, state.score[1 - p.team] - state.score[p.team])
         let comeback: Float = 1 + 0.25 * Float(min(deficit, 2))
-        let amt = base * dim * comeback
+        let amt = base * dim * comeback * mods(p).hypeGain
         p.hype = min(100, p.hype + amt)
         hist.append((reason, realTime))
         hypeHistory[i] = hist
@@ -539,6 +543,7 @@ public final class MatchSim {
         // Perfect-release window.
         var lo: Float = 0.72, hi: Float = 0.9
         if tech == .finesse { lo -= 0.04; hi += 0.04 }
+        lo -= mods(p).perfectWindow; hi += mods(p).perfectWindow
         if p.inFlow && p.loadout.playstyle == .finisher { lo = 0.35; hi = 1.0 }
         let overheld = held > 0.8 + 0.4
         let perfect = charge >= lo && charge <= hi && !overheld
@@ -580,6 +585,7 @@ public final class MatchSim {
         if tech == .driven { speed *= 1.07 }
         if tech == .knuckle { speed *= 1.05 }
         if p.inFlow && p.loadout.playstyle == .finisher { speed *= 1.12 }
+        speed *= mods(p).shotPower
 
         let y0 = state.ball.pos.y
         var delta = target - p.pos
@@ -734,6 +740,7 @@ public final class MatchSim {
             speed = lofted ? 0 : clampf(11 + length(m.pos - p.pos) * 0.45, 12, 20) * (0.92 + p.stats.passing * 0.12)
             if vision { speed *= 1.25 }
             if oneTouch && p.loadout.trait == .tikiTaka { speed *= 1.15 }
+            speed *= mods(p).passSpeed
             // Lead the receiver.
             for _ in 0..<2 {
                 let t = lofted ? 0.55 + length(tp - p.pos) / 24 : length(tp - p.pos) / max(speed, 1) * 1.15
@@ -858,7 +865,7 @@ public final class MatchSim {
             }
             if o.isHuman { continue } // humans have to read it themselves
             if dot(tn, face) > -0.2 && d < 2.4 {
-                var pBite = bite + (p.stats.control - o.stats.defending) * 0.4 - teams[o.team].aiSkill * 0.15
+                var pBite = bite + (p.stats.control - o.stats.defending) * 0.4 - teams[o.team].aiSkill * 0.15 + mods(p).bite
                 if showtime { pBite = 1 }
                 if rng.chance(pBite) {
                     state.players[o.id].action = .stumble; state.players[o.id].actionT = 0; state.players[o.id].actionDur = 0.55
@@ -913,6 +920,7 @@ public final class MatchSim {
         state.players[victim].vel = .zero
         emit(.nutmeg(attacker: i, victim: victim))
         addHype(i, .nutmeg, 20)
+        if mods(p).nutmegHype > 0 { addHypeRaw(i, mods(p).nutmegHype) }
     }
 
     // MARK: - Tackles
@@ -966,6 +974,7 @@ public final class MatchSim {
             var reach: Float = slide ? 1.05 : 1.3
             if wall { reach += 0.6 }
             if p.loadout.trait == .lastMan && !slide { reach += 0.2 }
+            reach += mods(p).tackleReach
             if b.owner >= 0 {
                 let o = state.players[b.owner]
                 if o.team == p.team || o.isKeeper { continue }

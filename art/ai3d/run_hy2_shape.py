@@ -10,7 +10,9 @@ t0 = time.time()
 r = c.predict(caption=None, image=handle_file(img), steps=30, guidance_scale=5.0, seed=1234, octree_resolution=256,
               check_box_rembg=True, num_chunks=8000, randomize_seed=False, api_name="/shape_generation")
 print("gen", int(time.time()-t0), "s", json.dumps(r[2])[:300])
-url = r[0]["url"] if isinstance(r[0], dict) else r[0]
+v = r[0]
+if isinstance(v, dict) and "value" in v: v = v["value"]
+url = v["url"] if isinstance(v, dict) else v
 for i in range(6):  # the Space's file route 502s intermittently
     resp = httpx.get(url, timeout=120, headers={"Authorization": f"Bearer {tok}"} if tok else {})
     if resp.status_code == 200 and resp.content[:4] == b"glTF":

@@ -82,7 +82,7 @@ struct Quest: Codable, Identifiable, Hashable {
 // MARK: - Match report
 
 enum MatchMode: Codable, Hashable {
-    case quick, career(stage: String), ranked, coop, friendly, tutorial, online(OnlineMode)
+    case quick, career(stage: String), ranked, coop, friendly, tutorial, online(OnlineMode), selection
 }
 
 struct MatchReport {
@@ -173,6 +173,9 @@ struct Profile: Codable {
     var settings = Settings()
     var shopDay = ""
     var shop: [String] = []
+    var selection: SelectionRun? = nil
+    var selectionBest = 0
+    var selectionRuns = 0
 
     // MARK: Derived
     var xpToNext: Int { 120 + (level - 1) * 40 }

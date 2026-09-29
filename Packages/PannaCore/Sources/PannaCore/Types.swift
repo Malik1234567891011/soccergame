@@ -86,14 +86,31 @@ public struct PlayerSetup: Codable, Hashable, Sendable {
     }
 }
 
+/// Run modifiers (The Selection perks). All neutral by default; online matches never set them.
+public struct TeamMods: Codable, Hashable, Sendable {
+    public var shotPower: Float = 1
+    public var passSpeed: Float = 1
+    public var hypeGain: Float = 1
+    public var staminaDrain: Float = 1
+    public var tackleReach: Float = 0
+    public var perfectWindow: Float = 0
+    public var sprint: Float = 1
+    public var bite: Float = 0
+    public var flowDuration: Float = 0
+    public var startHype: Float = 0
+    public var nutmegHype: Float = 0
+    public init() {}
+}
+
 public struct TeamSetup: Codable, Hashable, Sendable {
     public var name: String
     public var players: [PlayerSetup]   // exactly 3 outfield
     public var keeperSkill: Float        // 0...1
     public var aiSkill: Float            // 0...1 — bot decision quality for AI players on this team
     public var colors: [UInt32]          // primary, secondary (RGB hex) — cosmetic
-    public init(name: String, players: [PlayerSetup], keeperSkill: Float, aiSkill: Float, colors: [UInt32]) {
-        self.name = name; self.players = players; self.keeperSkill = keeperSkill; self.aiSkill = aiSkill; self.colors = colors
+    public var mods: TeamMods = TeamMods()
+    public init(name: String, players: [PlayerSetup], keeperSkill: Float, aiSkill: Float, colors: [UInt32], mods: TeamMods = TeamMods()) {
+        self.name = name; self.players = players; self.keeperSkill = keeperSkill; self.aiSkill = aiSkill; self.colors = colors; self.mods = mods
     }
 }
 

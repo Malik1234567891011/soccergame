@@ -6,6 +6,7 @@ struct RenderPlayerInfo {
     var appearance: Appearance
     var celebration: Int
     var name: String
+    var model: String? = nil
 }
 
 /// Turns sim state into a living SceneKit scene. Never mutates the sim.
@@ -61,7 +62,9 @@ final class MatchRenderer {
         for i in 0..<8 {
             let info = players[i]
             let keeper = i % 4 == 3
-            let rig = CharacterRig(appearance: info.appearance, isKeeper: keeper, keeperColor: i < 4 ? 0x2A6BFF : 0xFF7A1A, name: info.name)
+            let ink = teamColors[i / 4].mixed(with: UIColor(red: 0.05, green: 0.03, blue: 0.08, alpha: 1), 0.55)
+            let rig = CharacterRig(appearance: info.appearance, isKeeper: keeper, keeperColor: i < 4 ? 0x2A6BFF : 0xFF7A1A, name: info.name,
+                                   modelName: info.model, outlineColor: ink)
             let holder = SCNNode()
             holder.addChildNode(rig.root)
             scene.rootNode.addChildNode(holder)

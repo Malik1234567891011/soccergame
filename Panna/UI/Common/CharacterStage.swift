@@ -47,11 +47,15 @@ final class CharacterStage: NSObject, SCNSceneRendererDelegate, ObservableObject
     }
 
     func setCharacters(_ looks: [(Appearance, String)], spacing: Float = 1.25) {
+        setCharacters(looks.map { ($0.0, $0.1, nil) }, spacing: spacing)
+    }
+
+    func setCharacters(_ looks: [(Appearance, String, String?)], spacing: Float = 1.25) {
         holders.forEach { $0.removeFromParentNode() }
         holders = []; rigs = []
         let n = Float(looks.count)
         for (i, l) in looks.enumerated() {
-            let rig = CharacterRig(appearance: l.0, name: l.1)
+            let rig = CharacterRig(appearance: l.0, name: l.1, modelName: l.2)
             let h = SCNNode()
             h.position = SCNVector3((Float(i) - (n - 1) / 2) * spacing, 0, 0)
             h.addChildNode(rig.root)

@@ -47,7 +47,7 @@ enum Toon {
 
     static var style = Style.standard
 
-    static func material(_ color: UIColor, texture: UIImage? = nil, spec: Float = 0.15, rim: Float? = nil, emission: UIColor? = nil) -> SCNMaterial {
+    static func material(_ color: UIColor, texture: UIImage? = nil, spec: Float = 0.15, rim: Float? = nil, emission: UIColor? = nil, shadow: SIMD3<Float>? = nil) -> SCNMaterial {
         let m = SCNMaterial()
         m.lightingModel = .constant
         m.diffuse.contents = texture ?? color
@@ -60,17 +60,18 @@ enum Toon {
         m.shaderModifiers = [.surface: surface]
         let st = style
         m.setValue(NSValue(scnVector3: SCNVector3(st.lightDir.x, st.lightDir.y, st.lightDir.z)), forKey: "lightDir")
-        m.setValue(NSValue(scnVector3: SCNVector3(st.shadowTint.x, st.shadowTint.y, st.shadowTint.z)), forKey: "shadowTint")
+        let sh = shadow ?? st.shadowTint
+        m.setValue(NSValue(scnVector3: SCNVector3(sh.x, sh.y, sh.z)), forKey: "shadowTint")
         m.setValue(NSValue(scnVector3: SCNVector3(st.rimColor.x, st.rimColor.y, st.rimColor.z)), forKey: "rimColor")
         m.setValue(NSNumber(value: rim ?? st.rimAmount), forKey: "rimAmount")
         m.setValue(NSNumber(value: spec), forKey: "specAmount")
         return m
     }
 
-    static func outlineMaterial(width: Float = 0.016) -> SCNMaterial {
+    static func outlineMaterial(width: Float = 0.016, color: UIColor? = nil) -> SCNMaterial {
         let m = SCNMaterial()
         m.lightingModel = .constant
-        m.diffuse.contents = style.outline
+        m.diffuse.contents = color ?? style.outline
         m.cullMode = .front
         m.shaderModifiers = [.geometry: outlineGeometry]
         m.setValue(NSNumber(value: width), forKey: "outlineWidth")

@@ -25,13 +25,15 @@ struct PoseInput {
 final class CharacterRig {
     let root = SCNNode()
     let body = SCNNode()          // skeleton space; whole-body tilts (dives, flips, slides)
-    let model = CharacterModel.shared
+    let model: CharacterModel
+    let unique: Bool
     private(set) var appearance: Appearance
     let isKeeper: Bool
     var boneNode: [String: SCNNode] = [:]
     private var bones: [SCNNode] = []
     private var restRot: [simd_quatf] = []
-    private var headMaterial: SCNMaterial!
+    private var headMaterial: SCNMaterial?
+    let outlineColor: UIColor?
     private var expression: FaceExpression = .neutral
     private var blinkT: Float = 2
     private var exprHold: Float = 0
@@ -44,7 +46,9 @@ final class CharacterRig {
     let hipHeight: Float
     let scale: Float
 
-    init(appearance: Appearance, isKeeper: Bool = false, keeperColor: UInt32 = 0x2A2F3A, name: String = "") {
+    init(appearance: Appearance, isKeeper: Bool = false, keeperColor: UInt32 = 0x2A2F3A, name: String = "", modelName: String? = nil, outlineColor: UIColor? = nil) {
+        if let mn = modelName, !isKeeper, let m = CharacterModel.load(mn) { model = m; unique = true } else { model = CharacterModel.shared; unique = false }
+        self.outlineColor = outlineColor
         var a = appearance
         if isKeeper {
             a.primary = keeperColor; a.secondary = 0xE8FF3B; a.shirtPattern = .gradient; a.number = 1
@@ -62,14 +66,15 @@ final class CharacterRig {
         case .tall: sx = 0.98; sy = 1.07
         case .compact: sx = 1.04; sy = 0.93
         }
-        scale = sy
+        scale = unique ? 1 : sy
         build(name: name)
-        body.scale = SCNVector3(sx, sy, sx)
+        if !unique { body.scale = SCNVector3(sx, sy, sx) }
     }
 
     private func build(name: String) {
         let a = appearance
         root.addChildNode(body)
+        defer { if unique == false { buildAccessories(a) } }
         // Skeleton.
         for (i, bn) in model.boneNames.enumerated() {
             let n = SCNNode()
@@ -91,6 +96,10 @@ final class CharacterRig {
             armCorrection[k] = simd_quatf(from: d, to: SIMD3(0, -1, 0))
         }
 
+        if unique {
+            buildUnique()
+            return
+        }
         // Materials.
         let skin = Toon.material(a.skinColor, spec: 0.0)
         let kitTex = KitTexture.shirt(a, name: name)
@@ -112,13 +121,14 @@ final class CharacterRig {
             }
         }()
         let gloves = (a.accessory == .gloves) ? Toon.material(isKeeper ? UIColor(hex: 0xE8FF3B) : UIColor(hex: a.secondary), spec: 0.3) : skin
-        headMaterial = Toon.material(a.skinColor, texture: FaceTexture.image(a, .neutral), spec: 0.0)
-        headMaterial.diffuse.wrapS = .repeat
-        let outline = Toon.outlineMaterial()
-        let hairOutline = Toon.outlineMaterial(width: 0.006)
+        let hm = Toon.material(a.skinColor, texture: FaceTexture.image(a, .neutral), spec: 0.0)
+        hm.diffuse.wrapS = .repeat
+        headMaterial = hm
+        let outline = Toon.outlineMaterial(color: outlineColor)
+        let hairOutline = Toon.outlineMaterial(width: 0.006, color: outlineColor)
         let byName: [String: SCNMaterial] = [
             "skin": skin, "skin_arm": armMat, "shirt": shirt, "trim": trim, "shorts": shorts, "socks": socks,
-            "sockband": band, "boot": boot, "sole": sole, "bootaccent": accent, "hair": hair, "head": headMaterial,
+            "sockband": band, "boot": boot, "sole": sole, "bootaccent": accent, "hair": hair, "head": hm,
         ]
         let hairStyle = model.hairStyles.contains(a.hairStyle.rawValue) ? a.hairStyle.rawValue : (model.hairStyles.first ?? "")
         let hideHair = a.hairStyle == .bald || [.beanie, .cap].contains(a.headwear)
@@ -140,7 +150,24 @@ final class CharacterRig {
             node.castsShadow = true
             body.addChildNode(node)
         }
-        buildAccessories(a)
+    }
+
+    /// Painted AI-mesh characters: one baked texture, light cel ramp on top of the painted shading.
+    private func buildUnique() {
+        let boneInv = model.restWorld.map { NSValue(scnMatrix4: SCNMatrix4(simd_inverse($0))) }
+        let mat = Toon.material(.white, texture: model.texture, spec: 0.0, rim: 0.35, shadow: SIMD3(0.8, 0.78, 0.9))
+        mat.diffuse.wrapS = .clamp; mat.diffuse.wrapT = .clamp
+        let outline = Toon.outlineMaterial(width: 0.012, color: outlineColor)
+        for m in model.meshes {
+            let g = SCNGeometry(sources: m.sources, elements: m.elements + [m.outlineElement])
+            g.materials = m.elements.map { _ in mat } + [outline]
+            let node = SCNNode(geometry: g)
+            let sk = SCNSkinner(baseGeometry: g, bones: bones, boneInverseBindTransforms: boneInv, boneWeights: m.boneWeights, boneIndices: m.boneIndices)
+            sk.skeleton = body
+            node.skinner = sk
+            node.castsShadow = true
+            body.addChildNode(node)
+        }
     }
 
     /// A child of `bone` whose frame equals the rest body frame (so attachments use model coordinates).
@@ -256,8 +283,8 @@ final class CharacterRig {
         if want != expression && (exprHold <= 0 || want == .flow || want == .happy) {
             expression = want
             exprHold = want == .blink ? 0 : 0.25
-            headMaterial.diffuse.contents = FaceTexture.image(appearance, want)
-            headMaterial.emission.contents = want == .flow ? FaceTexture.glow(appearance) : nil
+            headMaterial?.diffuse.contents = FaceTexture.image(appearance, want)
+            headMaterial?.emission.contents = want == .flow ? FaceTexture.glow(appearance) : nil
         }
     }
 

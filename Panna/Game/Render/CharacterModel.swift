@@ -1,5 +1,6 @@
 import SceneKit
 import simd
+import UIKit
 
 /// Skinned character data exported from Blender (art/blender/character.py). Loaded once, shared by all instances.
 final class CharacterModel {
@@ -11,6 +12,7 @@ final class CharacterModel {
         let count: Int
         let pos: Int, nor: Int, uv: Int, joints: Int, weights: Int
         let groups: [GroupMeta]
+        let index32: Bool?
     }
     struct Header: Decodable {
         let bones: [BoneData]
@@ -38,16 +40,28 @@ final class CharacterModel {
     let headCenter: SIMD3<Float>
     let headRadius: Float
 
-    static let shared: CharacterModel = {
-        guard let url = Bundle.main.url(forResource: "base", withExtension: "bin"),
-              let data = try? Data(contentsOf: url) else { fatalError("character model missing") }
-        let hlen = Int(data.withUnsafeBytes { $0.load(as: UInt32.self) })
-        guard let header = try? JSONDecoder().decode(Header.self, from: data.subdata(in: 4..<(4 + hlen))) else { fatalError("bad model header") }
-        let blob = data.subdata(in: (4 + hlen)..<data.count)
-        return CharacterModel(header, blob: blob)
-    }()
+    static let shared: CharacterModel = CharacterModel.load("base")!
+    static var cache: [String: CharacterModel] = [:]
+    let texture: UIImage?
 
-    init(_ f: Header, blob: Data) {
+    /// Loads a model from the bundle (`name.bin`, optional `name.png` baked texture for unique characters).
+    static func load(_ name: String) -> CharacterModel? {
+        if let c = cache[name] { return c }
+        guard let url = Bundle.main.url(forResource: name, withExtension: "bin"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        let hlen = Int(data.withUnsafeBytes { $0.load(as: UInt32.self) })
+        guard let header = try? JSONDecoder().decode(Header.self, from: data.subdata(in: 4..<(4 + hlen))) else { return nil }
+        let blob = data.subdata(in: (4 + hlen)..<data.count)
+        let tex = Bundle.main.url(forResource: name, withExtension: "png").flatMap { UIImage(contentsOfFile: $0.path) }
+        let m = CharacterModel(header, blob: blob, texture: tex)
+        cache[name] = m
+        return m
+    }
+
+    static func exists(_ name: String) -> Bool { Bundle.main.url(forResource: name, withExtension: "bin") != nil }
+
+    init(_ f: Header, blob: Data, texture: UIImage? = nil) {
+        self.texture = texture
         boneNames = f.bones.map { $0.name }
         boneParents = f.bones.map { $0.parent }
         restWorld = f.bones.map { b in
@@ -76,14 +90,15 @@ final class CharacterModel {
             let bw = SCNGeometrySource(data: slice(m.weights, n * 16), semantic: .boneWeights, vectorCount: n,
                                        usesFloatComponents: true, componentsPerVector: 4, bytesPerComponent: 4, dataOffset: 0, dataStride: 16)
             var all = Data()
+            let ib = (m.index32 ?? false) ? 4 : 2
             let elements: [SCNGeometryElement] = m.groups.map { g in
-                let d = slice(g.offset, g.count * 2)
+                let d = slice(g.offset, g.count * ib)
                 all.append(d)
-                return SCNGeometryElement(data: d, primitiveType: .triangles, primitiveCount: g.count / 3, bytesPerIndex: 2)
+                return SCNGeometryElement(data: d, primitiveType: .triangles, primitiveCount: g.count / 3, bytesPerIndex: ib)
             }
             let total = m.groups.reduce(0) { $0 + $1.count }
             return Mesh(name: m.name, slot: m.slot, sources: sources, elements: elements, materialNames: m.groups.map { $0.material },
-                        outlineElement: SCNGeometryElement(data: all, primitiveType: .triangles, primitiveCount: total / 3, bytesPerIndex: 2),
+                        outlineElement: SCNGeometryElement(data: all, primitiveType: .triangles, primitiveCount: total / 3, bytesPerIndex: ib),
                         boneWeights: bw, boneIndices: bi)
         }
     }

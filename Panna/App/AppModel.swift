@@ -2,7 +2,7 @@ import SwiftUI
 import PannaCore
 
 enum Screen: Hashable {
-    case home, locker, squad, scout, career, profile, match, postMatch, onboarding, online, showcase, shop
+    case home, locker, squad, scout, career, profile, match, postMatch, onboarding, online, showcase, shop, selection
 }
 
 struct PendingMatch {
@@ -34,7 +34,7 @@ final class AppModel: ObservableObject {
         if env["PANNA_SHOWCASE"] != nil { screen = .showcase; return }
         if let s = env["PANNA_SCREEN"] {
             store.p.onboarded = true; store.p.tutorialDone = true
-            screen = ["locker": .locker, "squad": .squad, "scout": .scout, "career": .career, "profile": .profile, "shop": .shop, "online": .online, "onboarding": .onboarding][s] ?? .home
+            screen = ["locker": .locker, "squad": .squad, "scout": .scout, "career": .career, "profile": .profile, "shop": .shop, "online": .online, "onboarding": .onboarding, "selection": .selection][s] ?? .home
         }
         if env["PANNA_QUICK"] != nil {
             store.p.onboarded = true; store.p.tutorialDone = true
@@ -70,7 +70,7 @@ final class AppModel: ObservableObject {
                                 passing: b.passing * lvl, defending: b.defending * lvl, physical: b.physical * lvl)
         let setup = PlayerSetup(name: pr.name.capitalized, loadout: Loadout(playstyle: pr.playstyle, skill: pr.skill, shot: pr.shot, trait: pr.trait),
                                 stats: pr.playstyle.baseStats.adding(bonus), isHuman: false)
-        return Participant(setup: setup, appearance: a, celebration: Int.random(in: 0..<Celebration.allCases.count))
+        return Participant(setup: setup, appearance: a, celebration: Int.random(in: 0..<Celebration.allCases.count), model: pr.model)
     }
 
     static func crewKit(_ name: String) -> (UInt32, UInt32, ShirtPattern) {
@@ -133,6 +133,13 @@ final class AppModel: ObservableObject {
             aiSkill = min(0.95, 0.42 + Float(store.p.tierIndex) * 0.1 + Float(store.p.rp % 300) / 3000)
             oppName = Catalog.crewNames.randomElement()!
             venue = theme ?? .arena
+        case .selection:
+            let run = store.p.selection ?? SelectionRun()
+            aiSkill = Selection.aiSkill(round: run.round)
+            oppName = Selection.opponent(run.round)
+            boss = Selection.isBoss(run.round) ? Selection.boss(run.round) : nil
+            rules.duration = 90; rules.goalsToWin = 3
+            venue = ArenaTheme.all[(run.round - 1) / 3 % ArenaTheme.all.count]
         case .tutorial:
             aiSkill = 0.1
             oppName = "Night Shift"
@@ -155,6 +162,7 @@ final class AppModel: ObservableObject {
                              homeAISkill: 0.62, awayAISkill: aiSkill, theme: venue, humanId: bots ? -1 : 0)
         spec.keeperSkill = [0.62, 0.35 + aiSkill * 0.5]
         spec.rules = rules
+        if case .selection = mode { spec.homeMods = Selection.mods(store.p.selection?.perks ?? []) }
         pending = PendingMatch(mode: mode, theme: venue, stage: stage, opponentName: oppName)
         let m = MatchFactory.offline(spec)
         m.hapticsOn = store.p.settings.haptics
@@ -263,6 +271,20 @@ final class AppModel: ObservableObject {
         r.mvpName = s.players[best].name
         let rewards = forfeit ? RewardSummary() : store.apply(r)
         if case .tutorial = pend.mode { store.p.tutorialDone = true; store.save() }
+        if case .selection = pend.mode, !forfeit, var run = store.p.selection {
+            run.goals += r.goals
+            if r.won {
+                run.wins += 1
+                run.round += 1
+                run.pendingChoice = Selection.offer(excluding: run.perks)
+            } else if !r.draw {
+                run.lives -= 1
+                if run.lives <= 0 { run.over = true }
+            }
+            store.p.selection = run
+            if run.over { finishSelectionRun() }
+            store.save()
+        }
         if case .quick = pend.mode {
             quickSkill = min(0.88, max(0.22, quickSkill + (r.won ? 0.045 : (r.draw ? 0.01 : -0.06))))
         }
@@ -275,7 +297,29 @@ final class AppModel: ObservableObject {
         go(.postMatch)
     }
 
+    var lastRunReward: (coins: Int, gems: Int, round: Int)?
+
+    func startSelectionRun() {
+        store.p.selection = SelectionRun()
+        store.p.selectionRuns += 1
+        store.save()
+        Telemetry.log("selection_start")
+    }
+
+    func finishSelectionRun() {
+        guard let run = store.p.selection else { return }
+        let cleared = run.round - 1
+        let coins = cleared * 80
+        let gems = max(0, cleared - 2) * 8
+        store.p.coins += coins
+        store.p.gems += gems
+        store.p.selectionBest = max(store.p.selectionBest, cleared)
+        lastRunReward = (coins, gems, cleared)
+        Telemetry.log("selection_end", ["rounds": cleared])
+    }
+
     func leavePostMatch() {
+        if case .selection = pending?.mode { match = nil; go(.selection); return }
         match = nil
         if !store.p.onboarded { go(.onboarding) } else { go(.home) }
     }
@@ -283,6 +327,7 @@ final class AppModel: ObservableObject {
     func rematch() {
         guard let pend = pending else { return }
         match = nil
+        if case .selection = pend.mode { go(.selection); return }
         if case .online(let mode) = pend.mode {
             go(.online)
             if mode != .room { online.queue(mode) }
@@ -311,6 +356,7 @@ struct RootView: View {
             case .onboarding: OnboardingView()
             case .showcase: ShowcaseView()
             case .postMatch: PostMatchView()
+            case .selection: SelectionView()
             case .match:
                 if let m = app.match {
                     MatchScreen(controller: m, onQuit: { app.finishMatch(forfeit: true) })
@@ -338,7 +384,10 @@ struct ShowcaseView: View {
                 a.socks = 0x16181F
                 var b = Appearance.random(seed: 21, kit: (0x3B8CFF, 0x111318)); b.shirtPattern = .hoops; b.eyeColor = 1
                 var c = Appearance.random(seed: 33, kit: (0xFFD23B, 0x111318)); c.shirtPattern = .stripes; c.skinTone = 6
-                if env["PANNA_SHOWCASE"] == "prospects" {
+                if env["PANNA_SHOWCASE"] == "unique" {
+                    let l = Catalog.prospect("luna")!, k = Catalog.prospect("kairo")!
+                    stage.setCharacters([(k.appearance, "Kairo", "kairo"), (l.appearance, "Luna", "luna"), (c, "Sora", nil)])
+                } else if env["PANNA_SHOWCASE"] == "prospects" {
                     stage.setCharacters(Catalog.prospects.prefix(6).map { ($0.appearance, $0.name) }, spacing: 0.9)
                 } else if env["PANNA_SHOWCASE"] == "prospects2" {
                     stage.setCharacters(Catalog.prospects.dropFirst(6).map { ($0.appearance, $0.name) }, spacing: 0.9)

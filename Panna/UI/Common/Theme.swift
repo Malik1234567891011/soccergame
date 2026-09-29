@@ -119,6 +119,7 @@ struct CurrencyPill: View {
                 .contentTransition(.numericText())
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
+        .fixedSize()
         .background(Capsule().fill(.black.opacity(0.45)))
         .overlay(Capsule().stroke(color.opacity(0.4), lineWidth: 1))
     }
@@ -141,7 +142,7 @@ struct TopBar: View {
                 }
             }
             if let t = title {
-                Text(t).font(.display(24)).foregroundStyle(.white).lineLimit(1).fixedSize()
+                Text(t).font(.display(t.count > 10 ? 19 : 24)).foregroundStyle(.white).lineLimit(1).fixedSize()
             }
             Spacer()
             if showNav { NavBar() }
