@@ -167,7 +167,7 @@ final class AppModel: ObservableObject {
         // Team identity colour for rings/outlines/HUD: dark kits use their bright trim colour.
         func lum(_ c: UInt32) -> Double { Double((c >> 16) & 0xFF) * 0.3 + Double((c >> 8) & 0xFF) * 0.59 + Double(c & 0xFF) * 0.11 }
         // Opponents must never look like us: if their kit is close to ours, they change strip.
-        if KitRecolor.distance(kit.0, myKit.primary) < 0.55 {
+        if KitRecolor.clash(kit.0, myKit.primary) {
             let alt = KitRecolor.farthest(from: [myKit.primary, myKit.secondary])
             let trim: UInt32 = lum(alt) > 150 ? 0x16181F : 0xFFFFFF
             for i in away.indices where away[i].model == nil || true {

@@ -135,6 +135,22 @@ enum KitRecolor {
         return ((x.0 - y.0) * (x.0 - y.0) * 2 + (x.1 - y.1) * (x.1 - y.1) * 4 + (x.2 - y.2) * (x.2 - y.2) * 3).squareRoot()
     }
 
+    /// Two kits read as "the same team" from the match camera: too close in colour, or both vivid with similar hue
+    /// (red vs orange, blue vs cyan).
+    static func clash(_ a: UInt32, _ b: UInt32) -> Bool {
+        if distance(a, b) < 0.8 { return true }
+        func hs(_ c: UInt32) -> (Float, Float) {
+            let (r, g, b_) = rgb(c); let mx = max(r, g, b_), mn = min(r, g, b_), d = mx - mn
+            guard d > 0.001 else { return (0, 0) }
+            var h: Float = mx == r ? (g - b_) / d : (mx == g ? (b_ - r) / d + 2 : (r - g) / d + 4)
+            h /= 6; if h < 0 { h += 1 }
+            return (h, d / max(mx, 0.001))
+        }
+        let (ha, sa) = hs(a), (hb, sb) = hs(b)
+        let dh = min(abs(ha - hb), 1 - abs(ha - hb))
+        return sa > 0.4 && sb > 0.4 && dh < 0.11
+    }
+
     static let palette: [UInt32] = [0xFF3B5C, 0x3B8CFF, 0x39FF88, 0xFFD23B, 0xB26BFF, 0xFF8A3B, 0xFFFFFF, 0x16181F, 0x3BE8FF, 0xFF3BD4, 0x1E9E4A, 0x1B2A6B]
 
     static func farthest(from cs: [UInt32]) -> UInt32 {
