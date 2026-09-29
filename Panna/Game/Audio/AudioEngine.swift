@@ -66,10 +66,17 @@ final class AudioEngine {
             // Recorded/generated assets first, synthesis as fallback.
             let files: [Sfx: String] = [.kick: "kick", .bigKick: "bigkick", .header: "kick", .whistle: "whistle", .whistleLong: "whistlelong",
                                         .net: "net", .goalHorn: "horn", .save: "save", .tackle: "tackle", .slide: "tackle", .wall: "wall",
-                                        .post: "post", .panna: "panna", .ankles: "ooh", .flow: "flow", .revealLegend: "reveal", .revealEpic: "reveal"]
+                                        .post: "post", .panna: "panna", .ankles: "ooh", .flow: "flow", .revealLegend: "reveal", .revealEpic: "reveal",
+                                        .perfect: "perfect", .hypeReady: "charge"]
             for s in Sfx.allCases {
                 if let f = files[s], let buf = self.load(f) { b[s] = buf } else { b[s] = self.buffer(synth.make(s)) }
             }
+            // Street-slang barks: vo/<event>_<n>.mp3
+            var vo: [String: [AVAudioPCMBuffer]] = [:]
+            for ev in ["panna", "ankles", "goal", "perfect", "flow", "tackle"] {
+                vo[ev] = (0..<8).compactMap { self.load("\(ev)_\($0)") }
+            }
+            DispatchQueue.main.async { self.barks = vo }
             b[.crowdRoar] = self.load("roar")
             b[.crowdOoh] = self.load("ooh")
             let crowd = self.load("crowd") ?? self.buffer(synth.crowdLoop())
@@ -120,6 +127,32 @@ final class AudioEngine {
         let l = buf.floatChannelData![0], r = buf.floatChannelData![1]
         for i in 0..<samples.count { l[i] = samples[i]; r[i] = samples[i] }
         return buf
+    }
+
+    private var barks: [String: [AVAudioPCMBuffer]] = [:]
+    private var lastBark: CFTimeInterval = 0
+    private var lastBarkClip: [String: Int] = [:]
+    var barksOn = true
+
+    /// A hype shout from the street ("cook him!", "c'est filmé!"). Rate-limited so it stays special;
+    /// big moments (priority) always get one, small ones only sometimes.
+    func bark(_ event: String, priority: Bool = false, delay: Double = 0.15) {
+        guard barksOn, started, let clips = barks[event], !clips.isEmpty, !pool.isEmpty, engine.isRunning else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastBark > (priority ? 2.5 : 6) else { return }
+        if !priority && Double.random(in: 0..<1) > 0.55 { return }
+        lastBark = now
+        var i = Int.random(in: 0..<clips.count)
+        if clips.count > 1 && i == lastBarkClip[event] { i = (i + 1) % clips.count }   // never the same line twice running
+        lastBarkClip[event] = i
+        let buf = clips[i]
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            let n = self.pool[self.poolIndex]
+            self.poolIndex = (self.poolIndex + 1) % self.pool.count
+            n.volume = 0.95 * self.sfxVolume
+            n.scheduleBuffer(buf, at: nil, options: .interrupts)
+            n.play()
+        }
     }
 
     func play(_ s: Sfx, volume: Float = 1, pitch: Float = 1) {

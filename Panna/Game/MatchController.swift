@@ -335,6 +335,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             hitstop = perfect ? 0.1 : 0.05 + power * 0.03
             if perfect {
                 audio.play(.perfect)
+                if p == humanId { audio.bark("perfect", delay: 0.35) }
                 if p == humanId { banner(Banner(title: "PERFECT STRIKE", color: Color(hex: 0x39FF88))) }
             }
             if p == humanId { haptic(heavy) }
@@ -346,6 +347,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             audio.play(.goalHorn, volume: 0.7)
             audio.play(.crowdRoar)
             audio.crowdSwell(1)
+            if !own && (humanId < 0 || team == humanId / 4) { audio.bark("goal", priority: true, delay: 0.5) }
             let name = scorer >= 0 ? playerNames[scorer] : ""
             let us = humanId >= 0 && team == humanId / 4
             var sub = own ? "OWN GOAL" : name.uppercased()
@@ -359,6 +361,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         case .tackleWon(let t, let v, let slide):
             hitstop = 0.05
             audio.play(slide ? .slide : .tackle)
+            if t == humanId { audio.bark("tackle") }
             if t == humanId { haptic(heavy); banner(Banner(title: slide ? "CLEAN SLIDE" : "WON IT", color: Color(hex: 0x3BE8FF))) }
             if v == humanId { haptic(medium) }
         case .tackleMissed(let t, _):
@@ -368,6 +371,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             slowmo = 0.45; slowmoScale = 0.3
             audio.play(.panna)
             audio.play(.crowdOoh)
+            audio.bark("panna", priority: a == humanId, delay: 0.25)
             audio.crowdSwell(0.7)
             if a == humanId || humanId < 0 {
                 haptic(heavy)
@@ -379,6 +383,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             slowmo = 0.3; slowmoScale = 0.4
             audio.play(.ankles)
             audio.crowdSwell(0.5)
+            audio.bark("ankles", priority: a == humanId, delay: 0.2)
             if a == humanId { banner(Banner(title: "ANKLES!", subtitle: "\(playerNames[v]) is on the floor", color: Color(hex: 0xFF3BD4), big: true)); haptic(heavy) }
         case .skillMove(let p, _):
             audio.play(.skill)
@@ -392,6 +397,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             if p == humanId { qaSnap("flow", delay: 0.5); qaSnap("flowplay", delay: 2.5) }
             audio.play(.flow)
             audio.crowdSwell(0.6)
+            if p == humanId { audio.bark("flow", priority: true, delay: 0.6) }
             if p == humanId {
                 haptic(heavy)
                 if driver.allowsTimeWarp { hitstop = 0.35 }
