@@ -125,7 +125,8 @@ final class AppModel: ObservableObject {
         var aiSkill: Float
         var oppName: String
         var boss: String? = nil
-        var venue = theme ?? unlockedVenues.randomElement() ?? .cage
+        // Every city is in the rotation from day one (Career still travels city by city).
+        var venue = theme ?? ArenaTheme.all.randomElement() ?? .cage
         var rules = MatchRules()
         switch mode {
         case .career:

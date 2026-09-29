@@ -746,13 +746,18 @@ final class ArenaBuilder {
     }
 
     private func roof() {
-        let slab = SCNBox(width: 70, height: 1, length: 50, chamferRadius: 0)
+        // One-sided ceiling facing down: seen from the pitch (celebration cam), invisible to the broadcast
+        // camera above it — a solid slab here once hid the whole match.
+        let slab = SCNPlane(width: 70, height: 50)
         let m = Mat.pbr(UIColor(hex: 0x1A1B20), rough: 0.9, rim: 0)
-        root.addChildNode(Geo.node(slab, m, at: SCNVector3(0, 9.5, 0)))
+        m.isDoubleSided = false
+        let ceil = Geo.node(slab, m, at: SCNVector3(0, 9.5, 0))
+        ceil.eulerAngles.x = .pi / 2   // normal points down
+        root.addChildNode(ceil)
         // Pillars and strip lights.
         let pm = Mat.pbr(UIColor(hex: 0x2A2B30), rough: 0.8, rim: 0.1)
         for x in stride(from: -27, through: 27, by: 9) {
-            for z in [-17, 19] {
+            for z in [-17] {   // far side only: near pillars would stand in front of the camera
                 root.addChildNode(Geo.node(SCNBox(width: 1.2, height: 9.5, length: 1.2, chamferRadius: 0), pm, at: SCNVector3(Float(x), 4.75, Float(z))))
             }
         }
