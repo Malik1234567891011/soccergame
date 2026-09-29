@@ -344,6 +344,12 @@ final class AppModel: ObservableObject {
             if mode != .room { online.queue(mode) }
             return
         }
+        // Career: a win moves you on to the next stage.
+        if case .career = pend.mode, lastReport?.won == true,
+           let next = Catalog.chapters.flatMap({ $0.stages }).first(where: { store.p.careerStars[$0.id] == nil }) {
+            play(.career(stage: next.id), stage: next)
+            return
+        }
         play(pend.mode, theme: pend.theme, stage: pend.stage)
     }
 }

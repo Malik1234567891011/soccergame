@@ -98,7 +98,7 @@ struct PostMatchView: View {
                     }
                     Spacer()
                     HStack(spacing: 12) {
-                        GlowButton(title: "PLAY AGAIN", icon: "arrow.clockwise", height: 58) { app.rematch() }
+                        GlowButton(title: primaryTitle, icon: "arrow.clockwise", height: 58) { app.rematch() }
                             .frame(width: 240)
                         Button {
                             AudioEngine.shared.play(.uiBack)
@@ -117,6 +117,15 @@ struct PostMatchView: View {
             }
         }
         .onAppear(perform: animateIn)
+    }
+
+    var primaryTitle: String {
+        if case .selection = app.lastReport?.mode {
+            if store.p.selection?.over == true { return "RUN SUMMARY" }
+            return app.lastReport?.won == true ? "DEVOUR AN EGO" : "BACK TO THE RUN"
+        }
+        if case .career = app.lastReport?.mode { return app.lastReport?.won == true ? "NEXT MATCH" : "TRY AGAIN" }
+        return "PLAY AGAIN"
     }
 
     func stat(_ label: String, _ v: Int) -> some View {

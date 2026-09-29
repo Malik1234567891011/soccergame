@@ -20,7 +20,16 @@ struct SelectionView: View {
                 Spacer()
             }
         }
-        .onAppear { AudioEngine.shared.setTrack("selection") }
+        .onAppear {
+            AudioEngine.shared.setTrack("selection")
+            // Test hook: PANNA_SELECTION_AUTO=1 starts a run and plays straight away.
+            if ProcessInfo.processInfo.environment["PANNA_SELECTION_AUTO"] != nil {
+                if store.p.selection == nil { app.startSelectionRun() }
+                if let r = store.p.selection, r.pendingChoice.isEmpty, !r.over {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { app.play(.selection) }
+                }
+            }
+        }
         .onDisappear { AudioEngine.shared.setTrack("menu") }
     }
 
