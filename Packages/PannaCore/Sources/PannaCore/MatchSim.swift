@@ -22,6 +22,25 @@ public final class MatchSim {
     var disabledPlayers: Set<Int> = []
     var realTime: Float = 0   // never frozen, used for timing windows
     var supportRunner: [Int] = [-1, -1]   // per team: which supporting bot plays the forward runner
+    /// PRESS call (human presses pass while defending): seconds left of the double-team, per team.
+    var pressCallT: [Float] = [0, 0]
+    var pressCallCD: [Float] = [0, 0]
+    var pressCaller: [Int] = [-1, -1]
+    /// realTime the team last lost the ball (counter-press trigger for high-pressing crews).
+    var lostBallT: [Float] = [-99, -99]
+    var lastOwnerTeam = -1
+    /// realTime each player last collected a teammate's ball (quick-finish window).
+    var receivedFromMateT: [Float] = Array(repeating: -99, count: 8)
+    /// The last headed shot (keepers hold headers more easily).
+    var lastHeaderBy = -1
+    var lastHeaderT: Float = -99
+
+    /// Hype fills to 100 to unlock Flow and keeps charging to `hypeMax`: Flow popped later is longer and stronger.
+    public static let hypeReady: Float = 100
+    public static let hypeMax: Float = 150
+    /// Double-team length after a PRESS call, and the wait before the next call.
+    public static let pressCallDuration: Float = 2.5
+    public static let pressCallCooldown: Float = 6
 
     public init(home: TeamSetup, away: TeamSetup, rules: MatchRules = MatchRules(), seed: UInt64 = 1) {
         self.rules = rules
@@ -61,7 +80,14 @@ public final class MatchSim {
     public func setHuman(_ id: Int, _ human: Bool) { state.players[id].isHuman = human }
 
     /// Pre-charge a player's Hype (bosses arrive already dangerous).
-    public func boost(player: Int, hype: Float) { state.players[player].hype = min(100, hype) }
+    public func boost(player: Int, hype: Float) { state.players[player].hype = min(MatchSim.hypeMax, hype) }
+
+    /// Seconds left on `team`'s PRESS call (0 = none): the UI can light the button while the double-team is on.
+    public func pressCallRemaining(team: Int) -> Float { pressCallT[team] }
+    /// Seconds before `team` can call PRESS again.
+    public func pressCallCooldownRemaining(team: Int) -> Float { pressCallCD[team] }
+    /// The crew's defensive style (for the VS card / HUD).
+    public func defensiveStyle(team: Int) -> DefensiveStyle { teams[team].defense }
 
     /// A scripted situation (Daily Moments): positions, who has the ball, score and time already played.
     public struct Scenario: Sendable {
@@ -131,6 +157,8 @@ public final class MatchSim {
         state.ball.pos = V3(0, BallState.radius, 0)
         for i in brains.indices { brains[i] = AIBrain() }
         supportRunner = [-1, -1]
+        pressCallT = [0, 0]; pressCaller = [-1, -1]
+        lostBallT = [-99, -99]; lastOwnerTeam = -1
         keeperBrains = [KeeperBrain(), KeeperBrain()]
         emit(.kickoff(team: team))
     }
@@ -165,6 +193,16 @@ public final class MatchSim {
         }
 
         state.time += dt
+        for t in 0..<2 {
+            pressCallT[t] = max(0, pressCallT[t] - dt)
+            pressCallCD[t] = max(0, pressCallCD[t] - dt)
+            if pressCallT[t] <= 0 { pressCaller[t] = -1 }
+        }
+        if state.ball.owner >= 0 {
+            let ot = state.players[state.ball.owner].team
+            if lastOwnerTeam >= 0 && ot != lastOwnerTeam { lostBallT[lastOwnerTeam] = realTime }
+            lastOwnerTeam = ot
+        }
         // Resolve inputs: humans from the network/UI, everyone else from AI.
         for i in state.players.indices where !state.players[i].isKeeper && !disabledPlayers.contains(i) {
             let frame: InputFrame
@@ -300,9 +338,12 @@ public final class MatchSim {
         }
         state.players[i] = p
 
-        if pressed.contains(.flow) && p.hype >= 100 && !p.inFlow {
+        if pressed.contains(.flow) && p.hype >= MatchSim.hypeReady && !p.inFlow {
+            // Overcharge: hype banked past 100 (up to 150) makes a longer, stronger Flow (8 s ×1.0 → 11 s ×1.3).
+            let over = clampf((p.hype - MatchSim.hypeReady) / (MatchSim.hypeMax - MatchSim.hypeReady), 0, 1)
             state.players[i].hype = 0
-            state.players[i].flowT = 8 + mods(p).flowDuration
+            state.players[i].flowPower = 1 + over * 0.3
+            state.players[i].flowT = (8 + mods(p).flowDuration) * (1 + over * 0.4)
             emit(.flowStart(player: i))
         }
 
@@ -353,7 +394,16 @@ public final class MatchSim {
                 }
             }
             if pressed.contains(.pass) {
-                if b.owner < 0 && dBall < 1.3 && b.pos.y < 0.9 && p.touchCooldown <= 0 && lengthSq(V2(b.vel.x, b.vel.z)) > 4 {
+                if b.owner >= 0 && state.players[b.owner].team != p.team {
+                    // PRESS: the opponents have it. The nearest bot mate doubles up on the carrier for a moment
+                    // while the other covers the pass; then they go back to shape. One call every few seconds.
+                    if pressCallCD[p.team] <= 0 && !state.players[b.owner].isKeeper {
+                        pressCallT[p.team] = MatchSim.pressCallDuration
+                        pressCallCD[p.team] = MatchSim.pressCallCooldown
+                        pressCaller[p.team] = i
+                        for m in state.players where m.team == p.team { brains[m.id].decisionT = 0 }
+                    }
+                } else if b.owner < 0 && dBall < 1.3 && b.pos.y < 0.9 && p.touchCooldown <= 0 && lengthSq(V2(b.vel.x, b.vel.z)) > 4 {
                     takePossession(i, silent: true)
                     pass(i, lofted: false, aim: f.aim, move: f.move, oneTouch: true)
                 } else {
@@ -396,7 +446,7 @@ public final class MatchSim {
             let t = p.actionT
             let tech = SkillTech.allCases[Int(p.actionVariant) % SkillTech.allCases.count]
             var mult: Float = tech == .elastico ? 1.45 : (tech == .roulette ? 0.95 : 1.25)
-            if p.inFlow && p.loadout.playstyle == .winger { mult += 0.25 }
+            if p.inFlow && p.loadout.playstyle == .winger { mult += 0.25 * p.flowPower }
             desired = p.actionDir * jogSpeed(p) * mult
             if tech == .dragBack && t < 0.12 { desired = .zero }
             accel = 60
@@ -420,7 +470,7 @@ public final class MatchSim {
             if hasBall { speed *= 0.86 + p.stats.control * 0.08 }
             if p.shotCharge >= 0 { speed *= 0.72 }
             if p.burstT > 0 { speed *= 1.18 }
-            if p.inFlow { speed *= p.loadout.playstyle == .winger ? 1.22 : 1.08 }
+            if p.inFlow { speed *= 1 + (p.loadout.playstyle == .winger ? 0.22 : 0.08) * p.flowPower }
             if p.isKeeper { speed = keeperBrains[p.team].sprint ? 7.2 : 5.2 }
             desired = move * speed
         }
@@ -501,7 +551,7 @@ public final class MatchSim {
         let deficit = max(0, state.score[1 - p.team] - state.score[p.team])
         let comeback: Float = 1 + 0.25 * Float(min(deficit, 2))
         let amt = base * 1.6 * dim * comeback * mods(p).hypeGain
-        p.hype = min(100, p.hype + amt)
+        p.hype = min(MatchSim.hypeMax, p.hype + amt)
         hist.append((reason, realTime))
         hypeHistory[i] = hist
         state.players[i] = p
@@ -518,12 +568,15 @@ public final class MatchSim {
             let prevTeam = state.players[prev].team
             if prevTeam == p.team {
                 b.prevTouchSameTeam = prev
+                if !state.players[prev].isKeeper { receivedFromMateT[i] = realTime }
                 if b.passFrom == prev {
                     state.players[prev].passesCompleted += 1
                     addHype(prev, .perfectPass, 3)
                 }
             } else {
                 b.prevTouchSameTeam = -1
+                // Gave it away (pass cut out, heavy touch nicked): Flow is over. A saved or blocked shot isn't a loss.
+                if !b.isShot { endFlow(prev) }
                 // Intercepting an opponent's pass or blocking a shot.
                 if b.passFrom == prev && realTime - b.passTime < 3 {
                     state.players[i].interceptions += 1
@@ -540,6 +593,7 @@ public final class MatchSim {
         b.passFrom = -1
         b.lofted = false
         b.perfectShot = false
+        b.quickFinish = false
         state.ball = b
         lastPossessionTime = realTime
         if !silent { emit(.possession(player: i)) }
@@ -553,6 +607,13 @@ public final class MatchSim {
             state.players[i].shotCharge = 0.25
             state.players[i].chargeHeld = 0.2
         }
+    }
+
+    /// Flow ends early when its owner loses the ball.
+    func endFlow(_ i: Int) {
+        guard i >= 0, state.players[i].flowT > 0 else { return }
+        state.players[i].flowT = 0
+        emit(.flowEnd(player: i))
     }
 
     func release(_ i: Int) {
@@ -630,7 +691,7 @@ public final class MatchSim {
         if perfect { speed *= 1.1 }
         if tech == .driven { speed *= 1.07 }
         if tech == .knuckle { speed *= 1.05 }
-        if p.inFlow && p.loadout.playstyle == .finisher { speed *= 1.12 }
+        if p.inFlow && p.loadout.playstyle == .finisher { speed *= 1 + 0.12 * p.flowPower }
         speed *= mods(p).shotPower
 
         let y0 = state.ball.pos.y
@@ -690,6 +751,7 @@ public final class MatchSim {
         b.intendedReceiver = -1
         b.perfectShot = perfect
         b.lofted = false
+        b.quickFinish = isQuickFinish(i)
         state.ball = b
         p.touchCooldown = 0.35
         p.action = .kick; p.actionT = 0; p.actionDur = 0.32
@@ -700,6 +762,11 @@ public final class MatchSim {
         if perfect { addHype(i, .perfectShot, 6) } else if !rawShot { addHype(i, .perfectShot, 2) }
         keeperBrains[1 - p.team].threatT = 0
         keeperBrains[1 - p.team].reacted = false
+    }
+
+    /// The shooter collected a teammate's ball (not the keeper's) within the last second.
+    func isQuickFinish(_ i: Int) -> Bool {
+        return realTime - receivedFromMateT[i] < 1.0
     }
 
     func volley(_ i: Int, aim: V2) {
@@ -725,11 +792,15 @@ public final class MatchSim {
         let h: Float = header ? 0.4 : 0.9 + rng.range(-0.3, 0.6)
         let vy = (h - state.ball.pos.y) / t + 0.5 * MatchSim.gravity * t
         var b = state.ball
+        // A volley/header off a teammate's ball is a quick finish by definition.
+        let lastMate = b.lastTouch >= 0 && b.lastTouch != i && state.players[b.lastTouch].team == p.team && !state.players[b.lastTouch].isKeeper
+        b.quickFinish = lastMate
         b.owner = -1
         b.vel = V3(launch.x * speed, vy, launch.y * speed)
         b.spin = 0; b.wobble = 0
         b.isShot = dot(launch, normalized(gc - p.pos)) > 0.5
         b.shotBy = i; b.shotTime = realTime
+        if header { lastHeaderBy = i; lastHeaderT = realTime }
         if b.lastTouch >= 0 && state.players[b.lastTouch].team == p.team && b.lastTouch != i { b.prevTouchSameTeam = b.lastTouch }
         b.lastTouch = i
         b.passFrom = -1; b.intendedReceiver = -1
@@ -775,7 +846,12 @@ public final class MatchSim {
             let to = m.pos - p.pos
             let d = length(to)
             if d < 1.5 { continue }
-            let ang = acos(clampf(dot(normalized(to), prefer), -1, 1))
+            var ang = acos(clampf(dot(normalized(to), prefer), -1, 1))
+            if lengthSq(aim) > 0.01 && ang > cone * 0.5 {
+                // Aiming ahead of a runner (where the ball should go) counts as aiming at him.
+                let lead = passPlan(from: p, to: m, lofted: lofted, oneTouch: oneTouch).target - p.pos
+                if lengthSq(lead) > 0.25 { ang = min(ang, acos(clampf(dot(normalized(lead), prefer), -1, 1))) }
+            }
             if ang > cone && forceTarget != m.id { continue }
             let open = laneOpenness(from: p.pos, to: m.pos, team: p.team)
             let fwd = clampf(to.x * s / 15, -1, 1)
@@ -965,7 +1041,7 @@ public final class MatchSim {
 
     func addHypeRaw(_ i: Int, _ amt: Float) {
         if state.players[i].inFlow { return }
-        state.players[i].hype = min(100, state.players[i].hype + amt)
+        state.players[i].hype = min(MatchSim.hypeMax, state.players[i].hype + amt)
     }
 
     func nutmeg(_ i: Int, victim: Int) {
@@ -1004,7 +1080,8 @@ public final class MatchSim {
             if length(to) < 3.2 { d = normalized(to) }   // tackle assist toward the carrier
         } else if lengthSq(move) > 0.04 { d = normalized(move) }
         p.action = .tackle; p.actionT = 0; p.actionDur = 0.42; p.actionDir = d
-        p.tackleCooldown = 0.55
+        // Timing over volume: a lunge costs 0.75 s before the next one (was 0.55).
+        p.tackleCooldown = 0.75
         p.actionVariant = 0
         state.players[i] = p
     }
@@ -1035,7 +1112,7 @@ public final class MatchSim {
                     // Whiffed.
                     state.players[i].actionVariant = 2
                     // A whiffed lunge leaves you off balance: long enough for the carrier to go past (mashing costs).
-                    if !slide { state.players[i].action = .stumble; state.players[i].actionT = 0; state.players[i].actionDur = 0.5 }
+                    if !slide { state.players[i].action = .stumble; state.players[i].actionT = 0; state.players[i].actionDur = 0.7 }
                     emit(.tackleMissed(tackler: i, slide: slide))
                 }
                 continue
@@ -1043,7 +1120,7 @@ public final class MatchSim {
             let b = state.ball
             let wall = p.inFlow && p.loadout.playstyle == .enforcer
             var reach: Float = slide ? 1.05 : 1.3
-            if wall { reach += 0.6 }
+            if wall { reach += 0.6 * p.flowPower }
             if p.loadout.trait == .lastMan && !slide { reach += 0.2 }
             reach += mods(p).tackleReach
             if b.owner >= 0 {
@@ -1097,6 +1174,7 @@ public final class MatchSim {
                     state.players[o.id].touchCooldown = 0.45
                     state.players[o.id].shotCharge = -1
                     state.players[o.id].passHeld = -1
+                    endFlow(o.id)
                     state.players[i].tacklesWon += 1
                     state.players[i].touchCooldown = 0
                     emit(.tackleWon(tackler: i, victim: o.id, slide: slide))
@@ -1438,6 +1516,7 @@ public final class MatchSim {
                     keeperBrains[p.team] = kb
                     state.players[c.id].action = .stumble; state.players[c.id].actionT = 0; state.players[c.id].actionDur = 0.4
                     state.players[c.id].shotCharge = -1; state.players[c.id].passHeld = -1
+                    endFlow(c.id)
                     state.ball.owner = i
                     state.ball.lastTouch = i
                     state.ball.passFrom = -1
@@ -1460,6 +1539,7 @@ public final class MatchSim {
         var threat = false
         var interceptZ: Float = 0
         var interceptY: Float = 0
+        var zAtGoalLine: Float = 0
         if b.owner < 0 && towardGoal {
             let planeX = p.pos.x
             let t = (planeX - b.pos.x) / b.vel.x
@@ -1469,6 +1549,7 @@ public final class MatchSim {
                 // Is it heading on target?
                 let tg = (goalX - b.pos.x) / b.vel.x
                 let zAtGoal = b.pos.z + b.vel.z * tg
+                zAtGoalLine = zAtGoal
                 if abs(zAtGoal) < geo.shape.goalHalfWidth + 0.6 && length(hv) > 6 { threat = true }
             }
         }
@@ -1479,11 +1560,15 @@ public final class MatchSim {
             if b.wobble > 0 { reaction += 0.1 }
             if b.shotBy >= 0 {
                 let sh = state.players[b.shotBy]
-                if sh.inFlow && sh.loadout.playstyle == .finisher { reaction += 0.15 }
+                if sh.inFlow && sh.loadout.playstyle == .finisher { reaction += 0.15 * sh.flowPower }
             }
-            if b.perfectShot && abs(interceptZ) > geo.shape.goalHalfWidth * 0.55 { reaction += 0.3 }
-            // Placement pays even without the perfect strike: a ball tucked into the corner is a late read.
-            else if abs(interceptZ) > geo.shape.goalHalfWidth * 0.7 { reaction += 0.16 }
+            // Goals come from well-made shots, not rebound scrambles (parries now go wide): a perfect strike into
+            // the corner is a late read.
+            if b.perfectShot && abs(interceptZ) > geo.shape.goalHalfWidth * 0.55 { reaction += 0.26 }
+            // Placement pays without the perfect strike too (judged where it crosses the line).
+            else if abs(zAtGoalLine) > geo.shape.goalHalfWidth * 0.6 { reaction += 0.08 }
+            // Team play pays: a finish straight off a teammate's pass catches the keeper still shifting.
+            if b.quickFinish { reaction += 0.06 }
             if kb.threatT >= reaction {
                 let targetZ = clampf(interceptZ, -geo.shape.goalHalfWidth - 0.3, geo.shape.goalHalfWidth + 0.3)
                 let dz = targetZ - p.pos.y
@@ -1551,9 +1636,17 @@ public final class MatchSim {
             emit(.kick(player: i, power: 0.5, lofted: true))
             return
         }
-        if speed < 14 || (!diving && speed < 19 && dxz < 0.6) {
+        // Hold what a keeper should hold: a slow shot, or anything struck at his body between the knees and the
+        // head. Headers are easier still (no pace, looping). Only a firm ball he has to dive or stretch for is parried.
+        let header = b.shotBy >= 0 && b.shotBy == lastHeaderBy && b.shotTime == lastHeaderT
+        let bodyHeight = b.pos.y > 0.25 && b.pos.y < 1.95
+        var holdable: Float = 14
+        if !diving && dxz < 0.75 && bodyHeight { holdable = 21 + skill * 3 }
+        else if !diving && dxz < 0.95 { holdable = 17 + skill * 2 }
+        if header { holdable += 3 }
+        if speed < holdable {
             // Catch.
-            if wasShot { state.players[i].saves += 1; emit(.save(keeper: i, caught: true)) }
+            if wasShot { state.players[i].saves += 1; kb.lastSaveT = realTime; keeperBrains[p.team] = kb; emit(.save(keeper: i, caught: true)) }
             state.ball.owner = i
             state.ball.lastTouch = i
             state.ball.isShot = false
@@ -1565,12 +1658,20 @@ public final class MatchSim {
             state.players[i].actionDur = 0.5
             emit(.possession(player: i))
         } else {
-            // Parry wide.
+            // Parry wide to the flank on the side with fewer attackers (not back to the shooter, not across the box,
+            // not into the corner where it can be walked along the goal line). Kept low so it doesn't sit up for a header.
             var nb = state.ball
-            let side: Float = nb.pos.z >= p.pos.y ? 1 : -1
-            // Parry away from danger: wide toward the flank rather than back into the six-yard scramble.
-            let out = V2(s * (3 + rng.range(0, 3)), side * (8 + rng.range(0, 4)))
-            nb.vel = V3(out.x, 3.5 + rng.range(0, 2), out.y)
+            var side: Float = nb.vel.z > 1.5 ? 1 : (nb.vel.z < -1.5 ? -1 : (nb.pos.z >= p.pos.y ? 1 : -1))
+            func danger(_ sd: Float) -> Float {
+                let land = V2(goalX + s * 5, sd * 7.5)
+                var d: Float = 99
+                for o in state.players where o.team != p.team && !o.isKeeper && !disabledPlayers.contains(o.id) { d = min(d, length(o.pos - land)) }
+                return d
+            }
+            let dSame = danger(side), dOther = danger(-side)
+            if dOther > dSame + 1.5 { side = -side }
+            let out = V2(s * (2.5 + rng.range(0, 2)), side * (8.5 + rng.range(0, 2.5)))
+            nb.vel = V3(out.x, 1.2 + rng.range(0, 1.0), out.y)
             nb.spin = 0; nb.wobble = 0
             nb.isShot = false
             nb.lastTouch = i
@@ -1578,6 +1679,8 @@ public final class MatchSim {
             state.ball = nb
             state.players[i].touchCooldown = 0.5
             state.players[i].saves += 1
+            kb.lastSaveT = realTime
+            keeperBrains[p.team] = kb
             emit(.save(keeper: i, caught: false))
         }
     }
@@ -1590,4 +1693,6 @@ struct KeeperBrain {
     var reacted = false
     var holdT: Float = 0
     var smotherCD: Float = 0
+    /// realTime of this keeper's last save (bots think twice before hitting the same shot at him again).
+    var lastSaveT: Float = -99
 }

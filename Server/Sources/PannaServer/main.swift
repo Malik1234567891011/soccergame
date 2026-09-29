@@ -165,13 +165,13 @@ final class ServerMatch {
             for i in 0..<3 {
                 if i < humans.count, let h = humans[i].hello {
                     out.append(SlotInfo(name: h.name, appearance: h.appearance, celebration: h.celebration, loadout: h.loadout,
-                                        stats: mode == .ranked ? .neutral : h.stats, isHuman: true, playerId: h.playerId))
+                                        stats: mode.equalStats ? .neutral : h.stats, isHuman: true, playerId: h.playerId))
                 } else {
                     let styles: [Playstyle] = [.winger, .maestro, .finisher, .enforcer, .trickster]
                     let st = styles.randomElement()!
                     out.append(SlotInfo(name: botPrefix[i % botPrefix.count], appearance: Data(), celebration: Int.random(in: 0..<10),
                                         loadout: Loadout(playstyle: st, skill: SkillTech.allCases.randomElement()!, shot: .driven, trait: .none),
-                                        stats: mode == .ranked ? .neutral : st.baseStats, isHuman: false, playerId: nil))
+                                        stats: mode.equalStats ? .neutral : st.baseStats, isHuman: false, playerId: nil))
                 }
             }
             return out
@@ -187,7 +187,8 @@ final class ServerMatch {
                                 slots: slots(away, botPrefix: ["Ruben", "Yuki", "Mo"]))
         info = (homeInfo, awayInfo)
         var rules = MatchRules()
-        rules.normalizeStats = mode == .ranked
+        // Equal stats in every player-vs-player mode (ranked, duel, rooms); stats only count against bots (co-op).
+        rules.normalizeStats = mode.equalStats
         sim = MatchSim(home: homeInfo, away: awayInfo, rules: rules, seed: UInt64.random(in: 1...UInt64.max))
         for (i, s) in home.enumerated() { seats[i] = s; s.slot = i; s.match = self }
         for (i, s) in away.enumerated() { seats[4 + i] = s; s.slot = 4 + i; s.match = self }

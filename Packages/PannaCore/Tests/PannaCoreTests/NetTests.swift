@@ -33,3 +33,26 @@ final class NetTests: XCTestCase {
         XCTAssertEqual(mode, .ranked); XCTAssertEqual(h, 2)
     }
 }
+
+final class DefensiveStyleCodableTests: XCTestCase {
+    /// Payloads from before `defense` existed still decode (as zonal); new ones round-trip.
+    func testOldPayloadsDecode() throws {
+        var t = botTeam("H", skill: 0.6)
+        t.defense = .highPress
+        let data = try JSONEncoder().encode(t)
+        XCTAssertEqual(try JSONDecoder().decode(TeamSetup.self, from: data).defense, .highPress)
+        var obj = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        obj.removeValue(forKey: "defense"); obj.removeValue(forKey: "mods")
+        let old = try JSONDecoder().decode(TeamSetup.self, from: try JSONSerialization.data(withJSONObject: obj))
+        XCTAssertEqual(old.defense, .zonal)
+
+        let info = TeamInfo(name: "A", color: 1, aiSkill: 0.5, keeperSkill: 0.5, slots: [], defense: .lowBlock)
+        let idata = try JSONEncoder().encode(info)
+        XCTAssertEqual(try JSONDecoder().decode(TeamInfo.self, from: idata).defense, .lowBlock)
+        var iobj = try JSONSerialization.jsonObject(with: idata) as! [String: Any]
+        iobj.removeValue(forKey: "defense")
+        XCTAssertEqual(try JSONDecoder().decode(TeamInfo.self, from: try JSONSerialization.data(withJSONObject: iobj)).defense, .zonal)
+        XCTAssertTrue(OnlineMode.duel.equalStats && OnlineMode.room.equalStats && OnlineMode.ranked.equalStats)
+        XCTAssertFalse(OnlineMode.coop.equalStats)
+    }
+}

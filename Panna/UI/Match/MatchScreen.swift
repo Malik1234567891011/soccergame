@@ -260,7 +260,7 @@ struct HypeBar: View {
                 Capsule().fill(.black.opacity(0.5)).frame(width: 220, height: 9)
                 Capsule()
                     .fill(LinearGradient(colors: [Color(hex: 0xFF3BD4), Color(hex: 0xFFD23B)], startPoint: .leading, endPoint: .trailing))
-                    .frame(width: 220 * CGFloat(inFlow ? remaining / 8 : min(hype, 100) / 100), height: 9)
+                    .frame(width: 220 * CGFloat(inFlow ? min(1, remaining / 11) : min(hype, 150) / 150), height: 9)
                     .shadow(color: Color(hex: 0xFFD23B).opacity(hype >= 100 || inFlow ? 0.9 : 0), radius: 8)
                 ForEach(1..<4) { i in
                     Rectangle().fill(.black.opacity(0.4)).frame(width: 2, height: 9).offset(x: 220 * CGFloat(i) / 4)

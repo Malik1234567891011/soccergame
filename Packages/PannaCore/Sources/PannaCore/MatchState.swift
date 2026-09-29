@@ -52,6 +52,8 @@ public struct PlayerState: Codable, Sendable {
     public var stamina: Float = 1
     public var hype: Float = 0
     public var flowT: Float = 0
+    /// Strength of the current Flow: 1 at 100 hype, up to 1.3 when popped at a full 150 (overcharge).
+    public var flowPower: Float = 1
     public var celebrate: UInt8 = 0
 
     public var runPhase: Float = 0        // purely for animation, advanced by distance
@@ -91,6 +93,9 @@ public struct BallState: Codable, Sendable {
     public var passTime: Float = 0
     public var perfectShot: Bool = false
     public var lofted: Bool = false
+    /// Struck within a moment of a teammate's pass (first-time finish, one-two, cut-back): the keeper is still
+    /// shifting across, so it's a later read than a shot from a dribble.
+    public var quickFinish: Bool = false
 
     public static let radius: Float = 0.2
 }

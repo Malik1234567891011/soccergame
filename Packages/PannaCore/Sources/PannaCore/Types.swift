@@ -102,6 +102,39 @@ public struct TeamMods: Codable, Hashable, Sendable {
     public init() {}
 }
 
+/// How a bot crew defends. The app can show `displayName` on the VS card ("PLAYS: HIGH PRESS").
+/// Bots only: a human on the team defends however they like.
+public enum DefensiveStyle: String, Codable, CaseIterable, Sendable {
+    /// Balanced default: one presser goal-side of the ball, the others mark the most dangerous runners.
+    case zonal
+    /// Gegenpressing: engage high up the pitch, a second man joins the press near their goal, and everyone
+    /// counter-presses for a few seconds after losing the ball. Leaves space in behind.
+    case highPress
+    /// Drop into a compact block in front of goal and only engage once the ball gets close. Hard to play
+    /// through, easy to keep the ball against.
+    case lowBlock
+    /// Man-to-man: each bot picks up one opponent and follows him tightly all over the pitch.
+    case manMark
+
+    public var displayName: String {
+        switch self {
+        case .zonal: return "ZONAL"
+        case .highPress: return "HIGH PRESS"
+        case .lowBlock: return "LOW BLOCK"
+        case .manMark: return "MAN-TO-MAN"
+        }
+    }
+
+    public var blurb: String {
+        switch self {
+        case .zonal: return "Balanced shape. One man presses, the rest mark space."
+        case .highPress: return "Hunts the ball high and in pairs. Beat the first man and there's space behind."
+        case .lowBlock: return "Sits deep and compact. Be patient, move it wide, shoot from the edge."
+        case .manMark: return "Tight man-to-man. Drag your marker away, then play the runner."
+        }
+    }
+}
+
 public struct TeamSetup: Codable, Hashable, Sendable {
     public var name: String
     public var players: [PlayerSetup]   // exactly 3 outfield
@@ -109,8 +142,26 @@ public struct TeamSetup: Codable, Hashable, Sendable {
     public var aiSkill: Float            // 0...1 — bot decision quality for AI players on this team
     public var colors: [UInt32]          // primary, secondary (RGB hex) — cosmetic
     public var mods: TeamMods = TeamMods()
-    public init(name: String, players: [PlayerSetup], keeperSkill: Float, aiSkill: Float, colors: [UInt32], mods: TeamMods = TeamMods()) {
+    /// How this team's bots defend.
+    public var defense: DefensiveStyle = .zonal
+    public init(name: String, players: [PlayerSetup], keeperSkill: Float, aiSkill: Float, colors: [UInt32], mods: TeamMods = TeamMods(),
+                defense: DefensiveStyle = .zonal) {
         self.name = name; self.players = players; self.keeperSkill = keeperSkill; self.aiSkill = aiSkill; self.colors = colors; self.mods = mods
+        self.defense = defense
+    }
+
+    enum CodingKeys: String, CodingKey { case name, players, keeperSkill, aiSkill, colors, mods, defense }
+
+    // Older payloads (no mods/defense) still decode.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        players = try c.decode([PlayerSetup].self, forKey: .players)
+        keeperSkill = try c.decode(Float.self, forKey: .keeperSkill)
+        aiSkill = try c.decode(Float.self, forKey: .aiSkill)
+        colors = try c.decode([UInt32].self, forKey: .colors)
+        mods = try c.decodeIfPresent(TeamMods.self, forKey: .mods) ?? TeamMods()
+        defense = try c.decodeIfPresent(DefensiveStyle.self, forKey: .defense) ?? .zonal
     }
 }
 

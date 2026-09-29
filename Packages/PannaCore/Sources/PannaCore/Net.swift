@@ -7,6 +7,10 @@ public enum OnlineMode: String, Codable, Sendable, CaseIterable {
     case duel        // 1v1 humans, AI teammates
     case coop        // up to 3 humans vs a bot crew
     case room        // private room with a code
+
+    /// Player-vs-player modes play with equal (neutral) stats: builds are sidegrades, skill decides.
+    /// Stats only matter against bots (co-op here; Career, Selection and Moments offline).
+    public var equalStats: Bool { self != .coop }
 }
 
 public struct SlotInfo: Codable, Sendable {
@@ -29,8 +33,20 @@ public struct TeamInfo: Codable, Sendable {
     public var aiSkill: Float
     public var keeperSkill: Float
     public var slots: [SlotInfo]
-    public init(name: String, color: UInt32, aiSkill: Float, keeperSkill: Float, slots: [SlotInfo]) {
-        self.name = name; self.color = color; self.aiSkill = aiSkill; self.keeperSkill = keeperSkill; self.slots = slots
+    /// How this crew's bots defend (older servers/clients omit it: zonal).
+    public var defense: DefensiveStyle
+    public init(name: String, color: UInt32, aiSkill: Float, keeperSkill: Float, slots: [SlotInfo], defense: DefensiveStyle = .zonal) {
+        self.name = name; self.color = color; self.aiSkill = aiSkill; self.keeperSkill = keeperSkill; self.slots = slots; self.defense = defense
+    }
+    enum CodingKeys: String, CodingKey { case name, color, aiSkill, keeperSkill, slots, defense }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        color = try c.decode(UInt32.self, forKey: .color)
+        aiSkill = try c.decode(Float.self, forKey: .aiSkill)
+        keeperSkill = try c.decode(Float.self, forKey: .keeperSkill)
+        slots = try c.decode([SlotInfo].self, forKey: .slots)
+        defense = try c.decodeIfPresent(DefensiveStyle.self, forKey: .defense) ?? .zonal
     }
 }
 
@@ -303,7 +319,7 @@ public extension MatchSim {
     convenience init(home: TeamInfo, away: TeamInfo, rules: MatchRules, seed: UInt64) {
         func team(_ t: TeamInfo) -> TeamSetup {
             TeamSetup(name: t.name, players: t.slots.map { PlayerSetup(name: $0.name, loadout: $0.loadout, stats: $0.stats, isHuman: $0.isHuman, appearance: $0.appearance) },
-                      keeperSkill: t.keeperSkill, aiSkill: t.aiSkill, colors: [t.color, 0xFFFFFF])
+                      keeperSkill: t.keeperSkill, aiSkill: t.aiSkill, colors: [t.color, 0xFFFFFF], defense: t.defense)
         }
         self.init(home: team(home), away: team(away), rules: rules, seed: seed)
     }

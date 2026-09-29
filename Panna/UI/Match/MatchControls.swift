@@ -176,7 +176,7 @@ struct FlowButton: View {
     var body: some View {
         ZStack {
             Circle().fill(Color.black.opacity(0.45))
-            Circle().trim(from: 0, to: CGFloat(inFlow ? remaining / 8 : hype / 100))
+            Circle().trim(from: 0, to: CGFloat(inFlow ? min(1, remaining / 11) : min(hype, 100) / 100))
                 .stroke(AngularGradient(colors: [Color(hex: 0xFFD23B), Color(hex: 0xFF3BD4), Color(hex: 0xFFD23B)], center: .center), style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Image(systemName: "bolt.fill")

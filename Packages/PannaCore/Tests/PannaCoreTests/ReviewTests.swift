@@ -89,8 +89,27 @@ struct ReviewMetrics {
     var flips = 0               // rapid direction reversals (dithering)
     var bumps = 0               // teammates within 1 m of each other (per second)
     var playSeconds: Float = 0
+    // Keeper / rebound loops.
+    var catches = 0, parries = 0
+    var pingPong = 0            // same shooter shoots again within 3 s of the same keeper parrying his shot
+    var pingPongLoops = 0       // …for the second time or more in a row (a real loop)
+    var reboundShots = 0        // any shot by the parried shooter's team within 3 s of a parry
+    var headers = 0
+    // Shot fluency (bots): decision/charge start → strike.
+    var botShots = 0, botCharged = 0, botFirstTime = 0, botStanding = 0
+    var botWindup: Float = 0, botStrikeSpeed: Float = 0, botDecideToStrike: Float = 0, botDecided = 0
+    // Teammate usefulness (human seat 0).
+    var hPasses = 0, hPassDone = 0, hPassToShot = 0, hPassToGoal = 0, oneTwos = 0, returnsToHuman = 0
+    var hOwnSamples = 0, hOpenMate = 0, hOpenAhead = 0
+    var hShots = 0, hGoals = 0
 
     mutating func add(_ o: ReviewMetrics) {
+        catches += o.catches; parries += o.parries; pingPong += o.pingPong; pingPongLoops += o.pingPongLoops; reboundShots += o.reboundShots; headers += o.headers
+        botShots += o.botShots; botCharged += o.botCharged; botFirstTime += o.botFirstTime; botStanding += o.botStanding
+        botWindup += o.botWindup; botStrikeSpeed += o.botStrikeSpeed; botDecideToStrike += o.botDecideToStrike; botDecided += o.botDecided
+        hPasses += o.hPasses; hPassDone += o.hPassDone; hPassToShot += o.hPassToShot; hPassToGoal += o.hPassToGoal; oneTwos += o.oneTwos
+        returnsToHuman += o.returnsToHuman; hOwnSamples += o.hOwnSamples; hOpenMate += o.hOpenMate; hOpenAhead += o.hOpenAhead
+        hShots += o.hShots; hGoals += o.hGoals
         matches += o.matches; goals += o.goals; for (k, v) in o.goalTypes { goalTypes[k, default: 0] += v }; shots += o.shots; saves += o.saves; passes += o.passes
         for (k, v) in o.outcomes { outcomes[k, default: 0] += v }
         keeperPasses += o.keeperPasses; keeperClaimsOfMateBall += o.keeperClaimsOfMateBall; keeperClaimsDeliberate += o.keeperClaimsDeliberate
@@ -111,6 +130,24 @@ struct ReviewMetrics {
             + " miscontrol/match=\(pm(outcomes[.miscontrol, default: 0])) bobbledButKept/match=\(pm(bobbles)) keeperBackPass/match=\(pm(keeperClaimsDeliberate)) keeperClaimsMateTouch/match=\(pm(keeperClaimsOfMateBall)) ownGoalClears/match=\(pm(ownGoalClears)) awayFromMates/match=\(pm(awayFromMates))"
             + " zone15s/match=\(pm(zoneIdle)) cornerZone/match=\(pm(zoneCorner)) idle2s/match=\(pm(idleSpells))"
             + String(format: " flips/min=%.1f bumps/min=%.1f", Float(flips) / max(playSeconds / 60, 0.01), Float(bumps) / max(playSeconds / 60, 0.01))
+    }
+
+    /// Keeper loops, shot fluency and (when there is a human seat) teammate usefulness.
+    func extraLine(_ label: String) -> String {
+        let m = Float(max(matches, 1))
+        func pm(_ v: Int) -> String { String(format: "%.2f", Float(v) / m) }
+        let bs = Float(max(botShots, 1))
+        var l = "REVIEW+[\(label)] catches/match=\(pm(catches)) parries/match=\(pm(parries)) PINGPONG/match=\(pm(pingPong)) loops(2+)/match=\(pm(pingPongLoops)) reboundShots/match=\(pm(reboundShots)) headers/match=\(pm(headers))"
+            + String(format: " | botShots=%.1f/match charged=%.0f%% firstTime=%.0f%% windup=%.2fs decide→strike=%.2fs strikeSpeed=%.1fm/s standing(<1.5m/s)=%.0f%%",
+                     Float(botShots) / m, Float(botCharged) / bs * 100, Float(botFirstTime) / bs * 100, botWindup / Float(max(botCharged, 1)),
+                     botDecideToStrike / Float(max(botDecided, 1)), botStrikeSpeed / bs, Float(botStanding) / bs * 100)
+        if hPasses > 0 || hOwnSamples > 0 {
+            l += String(format: " | HUMAN passes=%.1f done=%.0f%% pass→shot=%.2f pass→goal=%.2f oneTwos=%.2f matePassesBack=%.2f openMate=%.0f%% openAhead=%.0f%% humanShots=%.1f humanGoals=%.2f",
+                        Float(hPasses) / m, Float(hPassDone) / Float(max(hPasses, 1)) * 100, Float(hPassToShot) / m, Float(hPassToGoal) / m,
+                        Float(oneTwos) / m, Float(returnsToHuman) / m, Float(hOpenMate) / Float(max(hOwnSamples, 1)) * 100,
+                        Float(hOpenAhead) / Float(max(hOwnSamples, 1)) * 100, Float(hShots) / m, Float(hGoals) / m)
+        }
+        return l
     }
 }
 
@@ -139,6 +176,15 @@ final class MatchReviewer {
     var goalDist: [Float] = []
     var recent: [String] = []
     var ignore: Set<Int> = []     // players excluded from idle/parked checks (an idle human)
+    var parryOf: [Int: (keeper: Int, t: Float, chain: Int)] = [:]   // shooter → last parry of his shot
+    var shotChain: [Int: Int] = [:]
+    var chargeStart: [Float?] = Array(repeating: nil, count: 8)
+    var decideStart: [Float?] = Array(repeating: nil, count: 8)
+    var prevSpeed: [Float] = Array(repeating: 0, count: 8)
+    var humanChainT: Float = -99          // time of the last completed human pass whose move is still alive
+    var humanChainShot = false
+    var humanChainGoal = false
+    var trackHuman = false
 
     init(sim: MatchSim, label: String) { self.sim = sim; self.label = label; metrics.matches = 1 }
 
@@ -197,10 +243,38 @@ final class MatchReviewer {
                 passes.append(rec)
                 pending = passes.count - 1
                 if !p.isKeeper { checkKickDirection(pl, rec) }
-            case .save: metrics.saves += 1
+            case .save(let k, let caught):
+                metrics.saves += 1
+                if caught { metrics.catches += 1 } else {
+                    metrics.parries += 1
+                    if lastShot.0 >= 0 && t - lastShot.2 < 2 {
+                        let prevChain = parryOf[lastShot.0].map { t - $0.t < 4 && $0.keeper == k ? $0.chain : 0 } ?? 0
+                        parryOf[lastShot.0] = (k, t, prevChain + 1)
+                    }
+                }
+            case .header: metrics.headers += 1
             case .shot(let pl, _, _):
                 metrics.shots += 1
                 let p = s.players[pl]
+                if let pr = parryOf[pl], t - pr.t < 3 {
+                    metrics.reboundShots += 1
+                    metrics.pingPong += 1
+                    if pr.chain >= 2 { metrics.pingPongLoops += 1 }
+                    note(String(format: "PINGPONG %@ shot again %.1fs after %@ parried his shot (loop #%d) from %@ dist=%.1fm ballH=%.2f",
+                                pname(pl), t - pr.t, pname(pr.keeper), pr.chain, fmt(p.pos), length(geo.goalCenter(forAttackingTeam: p.team) - p.pos), s.ball.pos.y))
+                } else if parryOf.contains(where: { t - $0.value.t < 3 && s.players[$0.key].team == p.team }) {
+                    metrics.reboundShots += 1
+                }
+                if p.isHuman { metrics.hShots += 1 } else {
+                    metrics.botShots += 1
+                    let spd = prevSpeed[pl]
+                    metrics.botStrikeSpeed += spd
+                    if spd < 1.5 { metrics.botStanding += 1 }
+                    if let cs = chargeStart[pl] { metrics.botCharged += 1; metrics.botWindup += t - cs } else { metrics.botFirstTime += 1 }
+                    if let ds = decideStart[pl] ?? chargeStart[pl] { metrics.botDecideToStrike += t - ds; metrics.botDecided += 1 }
+                }
+                chargeStart[pl] = nil; decideStart[pl] = nil
+                if trackHuman && p.team == 0 && t - humanChainT < 6 && !humanChainShot { humanChainShot = true; metrics.hPassToShot += 1 }
                 lastShot = (pl, p.pos, t)
                 var nd: Float = 99
                 for o in s.players where o.team != p.team && !o.isKeeper { nd = min(nd, length(o.pos - p.pos)) }
@@ -213,6 +287,8 @@ final class MatchReviewer {
                 marks.append(MarkEvt(kind: "miss", player: tk, pos: s.players[tk].pos, dir: .zero, time: t))
             case .goal(let team, let scorer, _, let own):
                 metrics.goals += 1
+                if trackHuman && !own && scorer == 0 { metrics.hGoals += 1 }
+                if trackHuman && team == 0 && t - humanChainT < 7 && !humanChainGoal { humanChainGoal = true; metrics.hPassToGoal += 1 }
                 marks.append(MarkEvt(kind: "goal", player: scorer, pos: xz(s.ball.pos), dir: .zero, time: t))
                 let gd = lastShot.0 == scorer ? length(geo.goalCenter(forAttackingTeam: team) - lastShot.1) : -1
                 if lastShot.0 == scorer && !shotLog.isEmpty { shotLog[shotLog.count - 1].2 = true }
@@ -258,8 +334,31 @@ final class MatchReviewer {
             else if b.owner == rec.passer && t - rec.time > 0.3 { resolve(pi, taker: rec.passer, pos: bp, outcome: .loose, why: "back to passer") }
             else if t - rec.time > 5 { resolve(pi, taker: -1, pos: bp, outcome: .loose, why: "died") }
         }
+        // Shot wind-up tracking (charge start and, for bots, the decision to shoot).
+        for p in s.players where !p.isKeeper {
+            if p.shotCharge >= 0 && s.ball.owner == p.id { if chargeStart[p.id] == nil { chargeStart[p.id] = t } } else if s.ball.owner != p.id { chargeStart[p.id] = nil }
+            if !p.isHuman && s.ball.owner == p.id && sim.brains[p.id].holdShoot > 0 && decideStart[p.id] == nil { decideStart[p.id] = t }
+            if s.ball.owner != p.id { decideStart[p.id] = nil }
+        }
+        // Teammate usefulness for the human seat.
+        if trackHuman {
+            if s.ball.owner >= 0 && s.players[s.ball.owner].team != 0 { humanChainT = -99 }
+            if s.ball.owner == 0 && s.tick % 6 == 0 && playing {
+                metrics.hOwnSamples += 1
+                let h = s.players[0]
+                var open = false, ahead = false
+                for m in s.players where m.team == 0 && m.id != 0 && !m.isKeeper && !m.busy {
+                    let plan = sim.passPlan(from: h, to: m, lofted: false)
+                    let safe = sim.passSafety(from: h.pos, to: plan.target, time: plan.time, team: 0, lofted: false)
+                    if safe > 0.5 && length(m.pos - h.pos) > 3 { open = true; if m.pos.x > h.pos.x + 2 { ahead = true } }
+                }
+                if open { metrics.hOpenMate += 1 }
+                if ahead { metrics.hOpenAhead += 1 }
+            }
+        }
         prevOwner = s.ball.owner
         prevLastTouch = s.ball.lastTouch
+        for p in s.players { prevSpeed[p.id] = length(p.vel) }
 
         guard playing else {
             for i in 0..<8 { idleStart[i] = nil; zoneSamples[i].removeAll() }
@@ -387,6 +486,16 @@ final class MatchReviewer {
         passes[pi] = rec
         pending = nil
         if !rec.fromKeeper { metrics.outcomes[outcome, default: 0] += 1 }
+        if trackHuman && rec.passer == 0 && rec.intended >= 0 {
+            metrics.hPasses += 1
+            if outcome == .completed { metrics.hPassDone += 1; humanChainT = rec.time; humanChainShot = false; humanChainGoal = false }
+        }
+        if trackHuman && rec.intended == 0 && rec.passer != 0 && !rec.fromKeeper && outcome == .completed {
+            metrics.returnsToHuman += 1
+            // One-two: the human played it to this mate, who gave it straight back.
+            if let prev = passes[..<pi].last(where: { $0.passer == 0 }), prev.intended == rec.passer, prev.outcome == .completed,
+               rec.time - prev.endTime < 2.5 { metrics.oneTwos += 1 }
+        }
         if outcome != .completed && !rec.fromKeeper {
             let s = sim.state
             var extra = ""
@@ -648,6 +757,7 @@ func reviewMatch(label: String, seed: UInt64, home: Float, away: Float, standIn:
     let sim = MatchSim(home: h, away: botTeam("A", skill: away), seed: seed)
     let r = MatchReviewer(sim: sim, label: label)
     if idleHuman { r.ignore = [0] }
+    r.trackHuman = standIn
     while sim.state.phase != .ended && sim.state.tick < 60 * 60 * 5 {
         var inputs: [Int: InputFrame] = [:]
         if standIn { inputs[0] = sim.suggestedInput(for: 0) }
@@ -684,7 +794,9 @@ final class ReviewTests: XCTestCase {
             let r = reviewMatch(label: label, seed: seed, home: h, away: a, standIn: standIn, idleHuman: label.hasPrefix("idle"), render: dir)
             allLog += r.log
             allLog.append(r.metrics.line(label))
+            allLog.append(r.metrics.extraLine(label))
             print(r.metrics.line(label))
+            print(r.metrics.extraLine(label))
         }
         try allLog.joined(separator: "\n").write(toFile: "\(dir)/incidents.log", atomically: true, encoding: .utf8)
         print("REVIEW diagrams + incidents.log written to \(dir)")
@@ -712,13 +824,16 @@ final class ReviewTests: XCTestCase {
             if s[0] > s[1] { strong += 1 } else if s[1] > s[0] { weak += 1 } else { draws += 1 }
         }
         lines.append(bots.line("bots 0.6v0.6"))
+        lines.append(bots.extraLine("bots 0.6v0.6"))
         lines.append(human.line("standin 0.6v0.6"))
+        lines.append(human.extraLine("standin 0.6v0.6"))
         lines.append(idle.line("idle-human 0.6v0.6"))
         for seed in 1...3 {
             for l in reviewMatch(label: "i\(seed)", seed: UInt64(300 + seed), home: 0.6, away: 0.6, standIn: false, idleHuman: true, render: nil).log
             where l.contains("IDLE") || l.contains("PARKED") { print(l) }
         }
         lines.append(sw.line("strong0.9 v weak0.25"))
+        lines.append(sw.extraLine("strong0.9 v weak0.25"))
  lines.append("REVIEW flips by job (bots, per match): " + bots.flipsBy.sorted { $0.key < $1.key }.map { "\($0.key)=\(String(format: "%.1f", Float($0.value) / Float(bots.matches)))" }.joined(separator: " "))
         lines.append("REVIEW goal types (bots): " + bots.goalTypes.sorted { $0.key < $1.key }.map { "\($0.key)=\(String(format: "%.2f", Float($0.value) / Float(bots.matches)))" }.joined(separator: " "))
         lines.append("REVIEW strong-vs-weak wins \(strong)-\(weak) (draws \(draws))")
