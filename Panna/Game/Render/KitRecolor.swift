@@ -85,14 +85,18 @@ enum KitRecolor {
                     else if mx == g { hue = (b - r) / d + 2 }
                     else { hue = (r - g) / d + 4 }
                     hue /= 6
-                    let satW = smooth(0.3, 0.48, sat) * smooth(0.06, 0.16, mx) * region
+                    // Inside the baked cloth map the drawing already said "kit": recolour confidently there.
+                    let loose = smooth(0.55, 0.9, region)
+                    let satW = smooth(0.3 - 0.15 * loose, 0.48 - 0.2 * loose, sat) * smooth(0.06, 0.16, mx) * region
+                    let tolRe = tolR + 0.04 * loose
                     let dh = abs(hue - (cal.red < 0 ? cal.red + 1 : cal.red))
                     let dRed = min(dh, 1 - dh)
                     // Pale pink highlights on the red jersey: skin never sits this close to pure red hue.
                     // Jersey hue comes from the character's own sheet; the tolerance tightens when skin is a saturated near-red.
-                    let satR = max(satW, smooth(0.14, 0.28, sat) * smooth(0.06, 0.16, mx) * region * (1 - smooth(tolR * 0.5, tolR * 0.9, dRed)))
-                    let wRed = (1 - smooth(tolR, tolR + 0.012, dRed)) * satR
-                    let wYel = (1 - smooth(0.028, 0.042, abs(hue - 0.14))) * satW
+                    let satR = max(satW, smooth(0.14, 0.28, sat) * smooth(0.06, 0.16, mx) * region * (1 - smooth(tolRe * 0.5, tolRe * 0.9, dRed)))
+                    let wRed = (1 - smooth(tolRe, tolRe + 0.012, dRed)) * satR
+                    let tolY = 0.028 + 0.03 * loose
+                    let wYel = (1 - smooth(tolY, tolY + 0.014, abs(hue - 0.14))) * satW
                     // Blue shorts / green socks sit far from skin and hair hues, so faded paint is caught too.
                     let satC = smooth(0.1, 0.24, sat) * smooth(0.04, 0.1, mx) * region
                     let wBlu = (1 - smooth(0.1, 0.14, abs(hue - cal.blue))) * satC
@@ -104,8 +108,8 @@ enum KitRecolor {
                     }
                     if wRed > 0 { mixIn(P, wRed, shade) }
                     // Bright orange = jersey red bleeding into the trim. Only where it cannot be this character's skin.
-                    let skinClash = cal.skinSat > 0.45 ? (1 - smooth(0.015, 0.03, abs(hue - cal.skinHue))) : 0
-                    let wOr = smooth(0.7, 0.8, sat) * smooth(0.5, 0.62, mx) * smooth(0.028, 0.04, hue) * (1 - smooth(0.095, 0.11, hue)) * (1 - skinClash) * region
+                    let skinClash = (cal.skinSat > 0.45 ? (1 - smooth(0.015, 0.03, abs(hue - cal.skinHue))) : 0) * (1 - loose)
+                    let wOr = smooth(0.7 - 0.3 * loose, 0.8 - 0.3 * loose, sat) * smooth(0.5 - 0.35 * loose, 0.62 - 0.35 * loose, mx) * smooth(0.028, 0.04, hue) * (1 - smooth(0.095, 0.11, hue)) * (1 - skinClash) * region
                     if wOr > 0 {
                         let t = min(1, max(0, (hue - 0.03) / 0.08))
                         mixIn((P.0 + (S.0 - P.0) * t, P.1 + (S.1 - P.1) * t, P.2 + (S.2 - P.2) * t), wOr, shade)

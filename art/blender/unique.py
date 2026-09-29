@@ -247,6 +247,7 @@ def kit_calibration(col, mask):
 
 views = {}
 view_px = {}
+view_cloth = {}
 for k in ('front', 'back', 'left', 'right'):
     p = arg('--' + k)
     if p: views[k] = load_view(p, keep_face=(k != 'back'))
@@ -255,6 +256,45 @@ if 'front' in views:
     _calp = os.path.join(ROOT, 'Panna', 'Resources', 'Characters', NAME + '_kit.json')
     json.dump(_cal, open(_calp, 'w'))
     print('UNIQUE kit calibration', _cal)
+
+def build_cloth(key, cal):
+    """Cloth map for the runtime recolour: this sheet's own jersey/trim/shorts/sock hues on a smoothed image
+    (paper grain never counts), plus thin seams where two kit colours blend. Skin never qualifies."""
+    img, (w, h, l, r, t, b), mask = views[key]
+    col = view_px[os.path.abspath(arg('--' + key))][:, :, :3]
+    def box(a_, r_=2):
+        c_ = np.cumsum(np.cumsum(np.pad(a_, ((r_ + 1, r_), (r_ + 1, r_)), mode='edge'), 0), 1)
+        k_ = 2 * r_ + 1
+        return (c_[k_:, k_:] - c_[:-k_, k_:] - c_[k_:, :-k_] + c_[:-k_, :-k_]) / (k_ * k_)
+    sm = np.stack([box(col[:, :, i]) for i in range(3)], 2)
+    mx_ = sm.max(2); mn_ = sm.min(2); d_ = mx_ - mn_
+    sat = d_ / np.maximum(mx_, 1e-6)
+    hue = np.zeros_like(mx_); nz = d_ > 1e-6
+    ir = nz & (mx_ == sm[:, :, 0]); ig = nz & (mx_ == sm[:, :, 1]) & ~ir; ib = nz & ~ir & ~ig
+    hue[ir] = ((sm[:, :, 1] - sm[:, :, 2])[ir] / d_[ir]) % 6; hue[ig] = (sm[:, :, 2] - sm[:, :, 0])[ig] / d_[ig] + 2; hue[ib] = (sm[:, :, 0] - sm[:, :, 1])[ib] / d_[ib] + 4
+    hue /= 6
+    redh = (cal.get('red') or (0.0, 0))[0]; skin = cal.get('skin') or (0.07, 0.3)
+    tol = max(0.012, min(0.035, (skin[0] - redh) * 0.5)) if skin[1] > 0.45 else 0.035
+    dr = np.abs(hue - (redh % 1.0)); dr = np.minimum(dr, 1 - dr)
+    ok = (sat > 0.4) & (mx_ > 0.12)
+    red = ok & (dr < tol)
+    yel = ok & (np.abs(hue - 0.14) < 0.035)
+    blu = (sat > 0.25) & (mx_ > 0.08) & (np.abs(hue - ((cal.get('blue') or (0.63, 0))[0])) < 0.12)
+    grn = (sat > 0.25) & (mx_ > 0.08) & (np.abs(hue - ((cal.get('green') or (0.37, 0))[0])) < 0.14)
+    def dil(m_, n):
+        m_ = m_.copy()
+        for _ in range(n): m_ |= np.roll(m_, 1, 0) | np.roll(m_, -1, 0) | np.roll(m_, 1, 1) | np.roll(m_, -1, 1)
+        return m_
+    def ero(m_, n):
+        m_ = m_.copy()
+        for _ in range(n): m_ &= np.roll(m_, 1, 0) & np.roll(m_, -1, 0) & np.roll(m_, 1, 1) & np.roll(m_, -1, 1)
+        return m_
+    kit = red | yel | blu | grn
+    seam = (sat > 0.45) & ~kit & ((dil(red, 4) & dil(yel, 4)) | (dil(red, 4) & dil(blu, 4)))
+    cloth = dil(ero(kit | seam, 2), 2) & mask       # opening: speckle never survives
+    view_cloth[os.path.abspath(arg('--' + key))] = cloth.astype(np.float32)
+for _k in ('front', 'back'):
+    if _k in views: build_cloth(_k, _cal)
 
 def register_vertical(key):
     """Refine vertical scale/offset of a front/back view by matching silhouette width profiles to the mesh."""
@@ -567,6 +607,8 @@ _Hz = zmax - zmin
 _ch = [abs(v.co.x) for v in obj.data.vertices if zmin + 0.70 * _Hz <= v.co.z <= zmin + 0.74 * _Hz]
 _thw0 = sorted(_ch)[int(len(_ch) * 0.6)] if _ch else 0.15 * _Hz
 def kit_like(c):
+    c = tuple(min(1.0, max(0.0, float(x))) for x in c)
+    if max(c) - min(c) < 1e-6: return max(c) > 0.8 or max(c) < 0.22
     h_, s_, v_ = colorsys.rgb_to_hsv(*c)
     if v_ < 0.22: return True                       # ink / deep shading
     if s_ < 0.3: return v_ > 0.8                   # white trim/highlight, not grey-beige skin
@@ -710,6 +752,30 @@ subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '88', tex
 if os.path.exists(jpg) and '/Panna/Resources/' in tex_path: os.remove(tex_path)
 print('UNIQUE baked texture', jpg)
 
+# ------------------------------------------------------------------ cloth map (same projection, cloth masks instead of colours)
+import colorsys as _cs
+for k in list(views.keys()):
+    img_k = views[k][0]
+    hh, ww = int(views[k][1][1]), int(views[k][1][0])
+    cm = view_cloth.get(os.path.abspath(arg('--' + k))) if k in ('front', 'back') else None
+    if cm is None or cm.shape != (hh, ww): cm = np.zeros((hh, ww), np.float32)
+    img_k.pixels[:] = np.dstack([cm, cm, cm, np.ones_like(cm)]).ravel()
+    img_k.update()
+def _cloth_v(c):
+    c = tuple(min(1.0, max(0.0, float(x))) for x in c)
+    if max(c) < 1e-4 or max(c) - min(c) < 1e-6: return 0.0
+    h_, s_, v_ = _cs.rgb_to_hsv(*c)
+    if s_ < 0.35 or v_ < 0.12: return 0.0
+    return 1.0 if (h_ < 0.035 or h_ > 0.93 or abs(h_ - 0.14) < 0.05 or abs(h_ - 0.63) < 0.12 or abs(h_ - 0.37) < 0.12) else 0.0
+for i, c in enumerate(vcol):
+    cv = _cloth_v(c)
+    vc_layer.data[i].color = (cv, cv, cv, vconf[i])
+cloth_img = bpy.data.images.new('cloth', 1024, 1024, alpha=False)
+bake_node.image = cloth_img
+nodes.active = bake_node
+bpy.ops.object.bake(type='EMIT')
+print('UNIQUE cloth map baked')
+
 if os.environ.get('DEBUG_FLANK'):
     bpx = np.array(bake_img.pixels[:], dtype=np.float32).reshape(TEX, TEX, 4)
     uvd = obj.data.uv_layers.active.data
@@ -820,15 +886,22 @@ for v in obj.data.vertices:
     val = 1.0 - min(1.0, max(0.0, (hw - 0.35) / 0.3))
     # Below the collarbone it is always shirt (the neck bone's weights reach the upper chest).
     zf = (v.co.z - mn.z) / H
-    if zf < 0.79: val = 1.0
-    elif zf < 0.81: val = max(val, (0.81 - zf) / 0.02)
+    # (except big-headed characters whose chin sits low: strong head/neck weight still wins)
+    hhead = sum(g.weight for g in v.groups if gname.get(g.group) == 'head') / tot
+    headish = min(1.0, max(0.0, (hhead - 0.5) / 0.3))   # the head bone only: neck weights bleed onto the chest
+    if zf < 0.79: val = max(val, 1.0 - headish)
+    elif zf < 0.81: val = max(val, (0.81 - zf) / 0.02 * (1.0 - headish))
     if v.co.z > neck_z: val = 0.0
     elif v.co.z > neck_z - 0.02 * H: val *= (neck_z - v.co.z) / (0.02 * H)
     km.data[v.index].color = (val, val, val, 1)
 mm = bpy.data.materials.new('maskbake'); mm.use_nodes = True
 mt = mm.node_tree; mt.nodes.clear()
 mo = mt.nodes.new('ShaderNodeOutputMaterial'); me_ = mt.nodes.new('ShaderNodeEmission'); vcn = mt.nodes.new('ShaderNodeVertexColor'); vcn.layer_name = 'kitmask'
-mt.links.new(vcn.outputs['Color'], me_.inputs['Color']); mt.links.new(me_.outputs[0], mo.inputs['Surface'])
+# Region = clothing zone (skeleton) x cloth map (what the drawing says is kit, not skin/hair).
+ctex = mt.nodes.new('ShaderNodeTexImage'); ctex.image = cloth_img; ctex.interpolation = 'Linear'
+cmul = mt.nodes.new('ShaderNodeMix'); cmul.data_type = 'RGBA'; cmul.blend_type = 'MULTIPLY'; cmul.inputs['Factor'].default_value = 1.0
+mt.links.new(vcn.outputs['Color'], cmul.inputs['A']); mt.links.new(ctex.outputs['Color'], cmul.inputs['B'])
+mt.links.new(cmul.outputs['Result'], me_.inputs['Color']); mt.links.new(me_.outputs[0], mo.inputs['Surface'])
 mimg = bpy.data.images.new('maskimg', 1024, 1024, alpha=False)
 mnode = mt.nodes.new('ShaderNodeTexImage'); mnode.image = mimg; mt.nodes.active = mnode
 saved_mats = list(obj.data.materials)
