@@ -1,4 +1,5 @@
 import SwiftUI
+import SceneKit
 import PannaCore
 
 struct ScoutView: View {
@@ -78,6 +79,12 @@ struct ScoutView: View {
             if showOdds { oddsSheet }
             if revealing { PackReveal(pulls: pulls) { revealing = false } }
         }
+        .onAppear {
+            if let n = ProcessInfo.processInfo.environment["PANNA_AUTOPULL"], let c = Int(n) {
+                store.p.gems += 2000
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { open(c, free: c == 1) }
+            }
+        }
     }
 
     func timeString(_ t: TimeInterval) -> String {
@@ -128,7 +135,10 @@ struct PackReveal: View {
     @State private var phase = 0
     @State private var summary = false
     @State private var burst = false
+    @State private var equipped: Set<String> = []
+    @StateObject private var walkout = CharacterStage(background: .clear, floor: false)
     @EnvironmentObject var app: AppModel
+    @EnvironmentObject var store: ProfileStore
 
     var sorted: [ProfileStore.Pull] { pulls.sorted { $0.rarity < $1.rarity } }
 
@@ -213,9 +223,23 @@ struct PackReveal: View {
             }
             if phase == 3 {
                 HStack(spacing: 30) {
+                    if let pid = p.prospect, let pr = Catalog.prospect(pid), pr.model != nil {
+                        ZStack(alignment: .bottomLeading) {
+                            StageView(stage: walkout).frame(width: 220, height: 330)
+                            card(p, width: 86).offset(x: -10, y: 10)
+                        }
+                        .onAppear {
+                            walkout.setCharacters([(pr.appearance, pr.name, pr.model)])
+                            walkout.animation = .celebrate
+                            walkout.yaw = 0.2
+                            walkout.camera.position = SCNVector3Make(0, 1.1, 4.6)
+                            walkout.camera.look(at: SCNVector3Make(0, 0.95, 0))
+                        }
+                    } else {
                     card(p, width: 190)
                         .scaleEffect(burst ? 1 : 0.2)
                         .rotation3DEffect(.degrees(burst ? 0 : 180), axis: (0, 1, 0))
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         RarityBadge(rarity: p.rarity)
                         Text(title(p)).font(.display(34)).foregroundStyle(.white)
@@ -226,6 +250,18 @@ struct PackReveal: View {
                             Text("MASTERY ★\(p.newMastery)").font(.label(13, .black)).foregroundStyle(Theme.gold)
                         } else if p.legacy != nil || p.prospect != nil {
                             Text("NEW!").font(.display(22)).foregroundStyle(Theme.green)
+                        }
+                        if let lid = p.legacy, let c = Catalog.legacy(lid) {
+                            Button {
+                                store.equip(c)
+                                AudioEngine.shared.play(.uiConfirm)
+                                equipped.insert(lid)
+                            } label: {
+                                Text(equipped.contains(lid) ? "EQUIPPED ✓" : "EQUIP NOW")
+                                    .font(.label(13, .black)).foregroundStyle(.black)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .background(Capsule().fill(equipped.contains(lid) ? Color.gray : Theme.green))
+                            }
                         }
                         Text("tap to continue").font(.label(11)).foregroundStyle(.white.opacity(0.4)).padding(.top, 8)
                     }

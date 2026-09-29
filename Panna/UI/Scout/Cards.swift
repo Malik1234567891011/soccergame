@@ -11,8 +11,6 @@ struct CardFrame<Content: View>: View {
         ZStack {
             RoundedRectangle(cornerRadius: 14).fill(Color.black)
             content.frame(width: width, height: h).clipped()
-            // Bottom gradient for text.
-            LinearGradient(colors: [.clear, .black.opacity(0.9)], startPoint: .center, endPoint: .bottom)
             RoundedRectangle(cornerRadius: 14)
                 .stroke(LinearGradient(colors: [rarity.glow, rarity.color, rarity.glow.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: rarity >= .epic ? 3.5 : 2.5)
         }
@@ -35,6 +33,7 @@ struct LegacyCardView: View {
                 } else {
                     LinearGradient(colors: [Color(hex: card.tint), .black], startPoint: .top, endPoint: .bottom)
                 }
+                LinearGradient(colors: [.clear, .black.opacity(0.92)], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 2) {
                     RarityBadge(rarity: card.rarity).scaleEffect(width / 170, anchor: .leading)
                     Text(card.title).font(.display(width * 0.13)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
@@ -66,6 +65,7 @@ struct ProspectCardView: View {
                 } else {
                     LinearGradient(colors: [Color(hex: prospect.aura), .black], startPoint: .top, endPoint: .bottom)
                 }
+                LinearGradient(colors: [.clear, .black.opacity(0.92)], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
                         RarityBadge(rarity: prospect.rarity).scaleEffect(width / 170, anchor: .leading)

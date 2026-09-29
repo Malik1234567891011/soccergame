@@ -30,6 +30,8 @@ final class ArenaBuilder {
         }
         skyline()
         if theme.hasRoof { roof() }
+        // Only players, ball and goals cast shadows; thin props make streaky artifacts.
+        root.enumerateHierarchy { n, _ in n.castsShadow = false }
     }
 
     // MARK: Sky & light
@@ -123,7 +125,8 @@ final class ArenaBuilder {
         let metal = Mat.pbr(UIColor(white: 0.18, alpha: 1), rough: 0.4, metal: 0.8, rim: 0)
         for (i, p) in towers.enumerated() {
             let h: Float = theme.hasRoof ? 7.5 : 14
-            if !theme.hasRoof {
+            // Near-side poles would stand between the camera and the goals — lights only.
+            if !theme.hasRoof && p.z < 0 {
                 let pole = SCNCylinder(radius: 0.18, height: CGFloat(h))
                 root.addChildNode(Geo.node(pole, metal, at: SCNVector3(p.x, h / 2, p.z)))
             }
@@ -350,8 +353,8 @@ final class ArenaBuilder {
             tn.eulerAngles = SCNVector3(0, -ang, Float.pi / 2)
             root.addChildNode(tn)
             if nearSide || nearCorner { continue }
-            // Fence above.
-            let fh = fenceH - boardH
+            // Fence above (end walls stay low so goalmouths read clearly).
+            let fh = isEnd ? 1.6 : fenceH - boardH
             let fence = SCNPlane(width: CGFloat(len), height: CGFloat(fh))
             let fm = fenceMat.copy() as! SCNMaterial
             fm.diffuse.contentsTransform = SCNMatrix4MakeScale(Float(len) / 0.6, fh / 0.6, 1)
@@ -459,7 +462,7 @@ final class ArenaBuilder {
             (V2(-L - 2.8, -W + 3), V2(-L - 2.8, W - 3), V2(-1, 0)),
             (V2(L + 2.8, -W + 3), V2(L + 2.8, W - 3), V2(1, 0)),
         ]
-        for (a, b, out) in spans {
+        for (a, b, out) in (dense ? spans : Array(spans.prefix(1))) {
             let d = b - a
             let len = PannaCore.length(d)
             for r in 0..<rows {

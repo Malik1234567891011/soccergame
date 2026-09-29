@@ -21,6 +21,9 @@ struct AIBrain {
 
 extension MatchSim {
 
+    /// What a bot would press for player `i` — used by the autopilot test pilot (and future assist modes).
+    public func suggestedInput(for i: Int) -> InputFrame { aiInput(for: i) }
+
     func aiSkill(_ p: PlayerState) -> Float { teams[p.team].aiSkill }
 
     /// Earliest point a player can reach a loose ball, using a cheap friction/gravity forward model.
@@ -369,12 +372,15 @@ extension MatchSim {
             brain.sprint = true
             return
         }
-        // Second player also hunts if the ball is near our goal.
+        // Near our goal the second man covers goal-side instead of piling onto the ball.
         let own = geo.ownGoal(team: p.team)
-        if length(xz(state.ball.pos) - own) < 10 {
-            let (ip, _) = interceptPoint(for: p)
-            brain.target = lerp2(ip, own, 0.3)
-            brain.sprint = true
+        let bpos = xz(state.ball.pos)
+        if length(bpos - own) < 11 {
+            var cover = lerp2(bpos, own, 0.5)
+            // Stay out of the scrum around the ball.
+            if length(cover - bpos) < 3.2 { cover = bpos + normalized(own - bpos) * 3.2 }
+            brain.target = cover
+            brain.sprint = length(cover - p.pos) > 3
             return
         }
         // Shape: spread around the ball.

@@ -393,9 +393,9 @@ struct ShowcaseView: View {
                     let l = Catalog.prospect("luna")!, k = Catalog.prospect("kairo")!
                     stage.setCharacters([(k.appearance, "Kairo", "kairo"), (l.appearance, "Luna", "luna"), (c, "Sora", nil)])
                 } else if env["PANNA_SHOWCASE"] == "prospects" {
-                    stage.setCharacters(Catalog.prospects.prefix(6).map { ($0.appearance, $0.name) }, spacing: 0.9)
+                    stage.setCharacters(Catalog.prospects.prefix(6).map { ($0.appearance, $0.name, $0.model) }, spacing: 0.9)
                 } else if env["PANNA_SHOWCASE"] == "prospects2" {
-                    stage.setCharacters(Catalog.prospects.dropFirst(6).map { ($0.appearance, $0.name) }, spacing: 0.9)
+                    stage.setCharacters(Catalog.prospects.dropFirst(6).map { ($0.appearance, $0.name, $0.model) }, spacing: 0.9)
                 } else if env["PANNA_SHOWCASE"] == "1" { stage.setCharacters([(a, "Malik")]) }
                 else { stage.setCharacters([(b, "Rex"), (a, "Malik"), (c, "Sora")]) }
                 switch env["PANNA_ANIM"] {

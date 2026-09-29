@@ -495,6 +495,7 @@ final class ProfileStore: ObservableObject {
             else if roll < legendaryChance + 0.12 + 0.45 { rarity = .rare }
             else { rarity = .common }
             if guaranteedEpic && i == count - 1 && rarity < .epic { rarity = .epic }
+            if p.totalPulls == 1 && rarity < .epic { rarity = .epic }   // first ever pull always delights
             if rarity >= .epic { guaranteedEpic = false; p.pityEpic = 0 }
             if rarity == .legendary { p.pity = 0 }
             out.append(grant(rarity))
@@ -526,6 +527,17 @@ final class ProfileStore: ObservableObject {
             else { p.legacies[lg.id] = have + 1; pull.duplicate = have > 0; pull.newMastery = have + 1 }
         }
         return pull
+    }
+
+    /// Equip a Legacy card straight from a reveal.
+    func equip(_ card: LegacyCard) {
+        switch card.effect {
+        case .skill(let t): p.loadout.skill = t
+        case .shot(let t): p.loadout.shot = t
+        case .trait(let t): p.loadout.trait = t
+        case .celebration(let c): p.celebration = c.rawValue
+        }
+        save()
     }
 
     func buyWithShards(legacy id: String) -> Bool {

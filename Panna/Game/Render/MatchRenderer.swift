@@ -29,6 +29,7 @@ final class MatchRenderer {
     var readyRings: [SCNNode] = []
     let trail: SCNParticleSystem
     let aimArrow = SCNNode()
+    let passMarker = SCNNode()
     let teamColors: [UIColor]
     let humanId: Int
     var localHumans: Set<Int>
@@ -109,6 +110,13 @@ final class MatchRenderer {
         aimArrow.isHidden = true
         aimArrow.castsShadow = false
         scene.rootNode.addChildNode(aimArrow)
+        let pm = SCNCone(topRadius: 0, bottomRadius: 0.14, height: 0.22)
+        pm.materials = [Mat.emissive(UIColor(hex: 0x39FF88), intensity: 2)]
+        passMarker.geometry = pm
+        passMarker.eulerAngles.x = .pi
+        passMarker.isHidden = true
+        passMarker.castsShadow = false
+        scene.rootNode.addChildNode(passMarker)
     }
 
     static let ballTexture: UIImage = Tex.render(CGSize(width: 512, height: 256), key: "ball") { c, s in
@@ -175,7 +183,7 @@ final class MatchRenderer {
 
     private func buildCamera() {
         camera.wantsHDR = true
-        camera.fieldOfView = 28
+        camera.fieldOfView = 25
         camera.zNear = 0.5
         camera.zFar = 400
         camera.bloomIntensity = 0.9
@@ -265,6 +273,24 @@ final class MatchRenderer {
                 let perfect = charge >= 0.72 && charge <= 0.9
                 aimArrow.childNodes.forEach { $0.geometry?.firstMaterial?.emission.contents = perfect ? UIColor(hex: 0x39FF88) : (charge > 0.9 ? UIColor(hex: 0xFF3B5C) : UIColor.white) }
             } else { aimArrow.isHidden = true }
+            // Pass preview: which teammate a tap-pass would pick (same cone logic as the sim).
+            if s.ball.owner == humanId && charge < 0 {
+                let prefer: V2 = lengthSq(aim) > 0.01 ? PannaCore.normalized(aim) : (lengthSq(h.lastInput.move) > 0.04 ? PannaCore.normalized(h.lastInput.move) : h.facingDir)
+                var best = -1
+                var bestScore: Float = -99
+                for m in s.players where m.team == h.team && m.id != humanId && !m.isKeeper {
+                    let to = m.pos - h.pos
+                    let ang = acos(max(-1, min(1, PannaCore.dot(PannaCore.normalized(to), prefer))))
+                    if ang > 0.87 { continue }
+                    let sc = 1 - ang / 0.87 - PannaCore.length(to) / 60
+                    if sc > bestScore { bestScore = sc; best = m.id }
+                }
+                if best >= 0 {
+                    let mn = playerNodes[best]
+                    passMarker.isHidden = false
+                    passMarker.position = SCNVector3(mn.position.x, 2.45 + sin(time * 7) * 0.06, mn.position.z)
+                } else { passMarker.isHidden = true }
+            } else { passMarker.isHidden = true }
         }
         // Ball.
         let b = s.ball
@@ -310,7 +336,7 @@ final class MatchRenderer {
         let nearGoal = max(0, abs(ball.x) - (L - 12)) / 12
         height -= nearGoal * 1.6
         back -= nearGoal * 1.4
-        focus.x = max(-L + 8, min(L - 8, focus.x))
+        focus.x = max(-L + 5, min(L - 5, focus.x))
         focus.z = max(-3, min(3.5, focus.z * 0.35))
 
         // Celebration cam: swoop onto the scorer.
@@ -355,7 +381,7 @@ final class MatchRenderer {
         cameraNode.position = SCNVector3(pos.x, pos.y, pos.z)
         cameraNode.look(at: SCNVector3(camTarget.x + ox, camTarget.y + oy, camTarget.z))
         fovPunch = max(0, fovPunch - dt * 12)
-        camera.fieldOfView = CGFloat(28 + fovPunch - celebrationCam * 3)
+        camera.fieldOfView = CGFloat(25 + fovPunch - celebrationCam * 3)
         // Colour grade for flow / slow-mo.
         let humanFlow = human?.inFlow ?? false
         flowGrade += ((humanFlow ? 1 : 0) - flowGrade) * min(1, dt * 4)

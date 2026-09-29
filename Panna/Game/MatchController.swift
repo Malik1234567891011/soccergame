@@ -47,6 +47,9 @@ final class OfflineDriver: MatchDriver {
     var state: MatchState { sim.state }
     var alpha: Float { acc / MatchSim.dt }
 
+    /// PANNA_AUTOPILOT: the human seat is driven by bot decisions through the human input path (testing).
+    let autopilot = ProcessInfo.processInfo.environment["PANNA_AUTOPILOT"] != nil
+
     init(sim: MatchSim, localPlayer: Int) {
         self.sim = sim
         self.localPlayer = localPlayer
@@ -57,11 +60,13 @@ final class OfflineDriver: MatchDriver {
         var out: [MatchEvent] = []
         var steps = 0
         var pending = input
+        let pilot = autopilot && localPlayer >= 0
         while acc >= MatchSim.dt && steps < 6 {
+            if pilot { pending = sim.suggestedInput(for: localPlayer) }
             prevState = sim.state
             sim.step(inputs: localPlayer >= 0 ? [localPlayer: pending] : [:])
             // Button pulses only need to be seen once.
-            pending.buttons = input.buttons
+            if !pilot { pending.buttons = input.buttons }
             out += sim.drainEvents().map { $0.event }
             acc -= MatchSim.dt
             steps += 1
