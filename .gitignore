@@ -7,3 +7,6 @@ build/
 .swiftpm/
 .DS_Store
 *.xcodeproj/
+art/ai3d/*_proj_*.png
+art/ai3d/*.blend
+art/ai3d/*_sheet.png

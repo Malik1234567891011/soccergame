@@ -20,6 +20,8 @@ struct SelectionView: View {
                 Spacer()
             }
         }
+        .onAppear { AudioEngine.shared.setTrack("selection") }
+        .onDisappear { AudioEngine.shared.setTrack("menu") }
     }
 
     // MARK: Intro

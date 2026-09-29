@@ -3,6 +3,7 @@ import AVFoundation
 enum Sfx: CaseIterable {
     case kick, bigKick, header, whistle, whistleLong, net, goalHorn, save, tackle, slide, wall, post, perfect, panna, ankles, skill, flow, hypeReady
     case uiTap, uiConfirm, uiBack, reward, packOpen, revealRare, revealEpic, revealLegend, levelUp, coin
+    case crowdRoar, crowdOoh
 }
 
 /// Everything is synthesised at launch — no audio assets to ship or license.
@@ -19,8 +20,20 @@ final class AudioEngine {
     private var crowdBase: Float = 0.25
     private var started = false
     var sfxVolume: Float = 1 { didSet { pool.forEach { $0.volume = sfxVolume } } }
-    var musicVolume: Float = 0.5 { didSet { musicNode.volume = musicVolume } }
+    var musicVolume: Float = 0.42 { didSet { musicNode.volume = musicVolume } }
     private var musicBuffer: AVAudioPCMBuffer?
+    private var selectionBuffer: AVAudioPCMBuffer?
+    private var currentTrack = "menu"
+
+    /// Switches the looping music track ("menu" or "selection").
+    func setTrack(_ t: String) {
+        guard started, t != currentTrack else { return }
+        currentTrack = t
+        guard wantMusic, let buf = (t == "selection" ? selectionBuffer : musicBuffer) else { return }
+        musicNode.stop()
+        musicNode.scheduleBuffer(buf, at: nil, options: .loops)
+        musicNode.play()
+    }
     private var crowdBuffer: AVAudioPCMBuffer?
 
     private init() {}
@@ -29,7 +42,7 @@ final class AudioEngine {
     let muted = ProcessInfo.processInfo.environment["PANNA_MUTE"] != nil
 
     func start() {
-        guard !started, !muted else { return }
+        guard !started else { return }
         started = true
         try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -50,13 +63,25 @@ final class AudioEngine {
         DispatchQueue.global(qos: .userInitiated).async {
             var synth = Synth()
             var b: [Sfx: AVAudioPCMBuffer] = [:]
-            for s in Sfx.allCases { b[s] = self.buffer(synth.make(s)) }
-            let crowd = self.buffer(synth.crowdLoop())
-            let music = self.buffer(synth.musicLoop())
+            // Recorded/generated assets first, synthesis as fallback.
+            let files: [Sfx: String] = [.kick: "kick", .bigKick: "bigkick", .header: "kick", .whistle: "whistle", .whistleLong: "whistlelong",
+                                        .net: "net", .goalHorn: "horn", .save: "save", .tackle: "tackle", .slide: "tackle", .wall: "wall",
+                                        .post: "post", .panna: "panna", .ankles: "ooh", .flow: "flow", .revealLegend: "reveal", .revealEpic: "reveal"]
+            for s in Sfx.allCases {
+                if let f = files[s], let buf = self.load(f) { b[s] = buf } else { b[s] = self.buffer(synth.make(s)) }
+            }
+            b[.crowdRoar] = self.load("roar")
+            b[.crowdOoh] = self.load("ooh")
+            let crowd = self.load("crowd") ?? self.buffer(synth.crowdLoop())
+            let music = self.load("menu_theme") ?? self.buffer(synth.musicLoop())
+            let selection = self.load("selection_theme")
             DispatchQueue.main.async {
                 self.buffers = b
                 self.crowdBuffer = crowd
                 self.musicBuffer = music
+                self.selectionBuffer = selection
+                if self.muted { self.engine.mainMixerNode.outputVolume = 0 }
+                print("[audio] loaded \(b.count) sfx, crowd=\(crowd != nil) music=\(music.map { $0.frameLength } ?? 0) selection=\(selection != nil)")
                 do { try self.engine.start() } catch { print("audio engine failed: \(error)") }
                 self.pool.forEach { $0.play() }
                 self.crowdNode.play()
@@ -65,6 +90,28 @@ final class AudioEngine {
                 if self.wantMusic, let m = music { self.musicNode.scheduleBuffer(m, at: nil, options: .loops) }
             }
         }
+    }
+
+    /// Loads a bundled mp3 and converts it to the engine's stereo 44.1 kHz float format.
+    private func load(_ name: String) -> AVAudioPCMBuffer? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "mp3"),
+              let file = try? AVAudioFile(forReading: url) else { return nil }
+        let src = file.processingFormat
+        guard let inBuf = AVAudioPCMBuffer(pcmFormat: src, frameCapacity: AVAudioFrameCount(file.length)) else { return nil }
+        do { try file.read(into: inBuf) } catch { return nil }
+        if src.channelCount == format.channelCount && src.sampleRate == format.sampleRate { return inBuf }
+        guard let conv = AVAudioConverter(from: src, to: format) else { return nil }
+        let ratio = format.sampleRate / src.sampleRate
+        guard let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(Double(inBuf.frameLength) * ratio) + 1024) else { return nil }
+        var fed = false
+        var err: NSError?
+        conv.convert(to: out, error: &err) { _, status in
+            if fed { status.pointee = .endOfStream; return nil }
+            fed = true
+            status.pointee = .haveData
+            return inBuf
+        }
+        return err == nil ? out : nil
     }
 
     private func buffer(_ samples: [Float]) -> AVAudioPCMBuffer? {
@@ -121,7 +168,7 @@ final class AudioEngine {
         if on {
             if !musicNode.isPlaying || musicNode.volume == 0 {
                 musicNode.stop()
-                if let m = musicBuffer { musicNode.scheduleBuffer(m, at: nil, options: .loops) }
+                if let m = (currentTrack == "selection" ? selectionBuffer : musicBuffer) ?? musicBuffer { musicNode.scheduleBuffer(m, at: nil, options: .loops) }
                 musicNode.play()
             }
             musicNode.volume = musicVolume
@@ -177,6 +224,7 @@ private struct Synth {
         case .revealRare: return me.arp([523, 784], step: 0.08, dur: 0.6, gain: 0.35)
         case .revealEpic: return me.mix(me.arp([440, 554, 659, 880, 1109], step: 0.07, dur: 1.0, gain: 0.35), me.thump(freq: 60, drop: 30, dur: 0.6, click: 0.5, gain: 0.8))
         case .revealLegend: return me.mix(me.horn(dur: 1.6), me.mix(me.arp([392, 494, 587, 784, 988, 1175, 1568], step: 0.09, dur: 1.8, gain: 0.35), me.thump(freq: 50, drop: 25, dur: 1.0, click: 0.8, gain: 1.0)))
+        case .crowdRoar, .crowdOoh: return me.swish(dur: 1.5, lo: 0.05, hi: 0.3, gain: 0.3)
         }
     }
 

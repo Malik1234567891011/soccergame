@@ -255,7 +255,8 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             hitstop = 0.18
             slowmo = 1.1; slowmoScale = 0.28
             audio.play(.net)
-            audio.play(.goalHorn)
+            audio.play(.goalHorn, volume: 0.7)
+            audio.play(.crowdRoar)
             audio.crowdSwell(1)
             let name = scorer >= 0 ? playerNames[scorer] : ""
             let us = humanId >= 0 && team == humanId / 4
@@ -276,6 +277,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         case .nutmeg(let a, let v):
             slowmo = 0.45; slowmoScale = 0.3
             audio.play(.panna)
+            audio.play(.crowdOoh)
             audio.crowdSwell(0.7)
             if a == humanId || humanId < 0 {
                 haptic(heavy)
