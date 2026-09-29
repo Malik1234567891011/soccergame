@@ -1,4 +1,5 @@
 import SwiftUI
+import SceneKit
 import PannaCore
 
 struct SquadView: View {
@@ -7,6 +8,7 @@ struct SquadView: View {
     @State private var tab = 0
     @State private var detail: LegacyCard?
     @State private var prospectDetail: Prospect?
+    @StateObject private var viewer = CharacterStage(background: .clear, floor: true)
 
     var body: some View {
         ZStack {
@@ -60,6 +62,9 @@ struct SquadView: View {
             if let c = detail { legacySheet(c) }
             if let pr = prospectDetail { prospectSheet(pr) }
         }
+        .onAppear {
+            if let id = ProcessInfo.processInfo.environment["PANNA_SQUADDETAIL"] { prospectDetail = Catalog.prospect(id) }   // QA
+        }
     }
 
     func tabButton(_ t: String, _ i: Int) -> some View {
@@ -75,8 +80,26 @@ struct SquadView: View {
         let inSquad = store.p.squad.contains(pr.id)
         return ZStack {
             Color.black.opacity(0.75).ignoresSafeArea().onTapGesture { prospectDetail = nil }
-            HStack(spacing: 24) {
-                ProspectCardView(prospect: pr, width: 190, level: store.p.prospects[pr.id] ?? 1, owned: owned)
+            HStack(spacing: 18) {
+                // The footballer in 3D, in your kit — tap to see their celebration.
+                if pr.model != nil {
+                    StageView(stage: viewer)
+                        .frame(width: 230, height: 330)
+                        .onTapGesture { viewer.animation = viewer.animation == .celebrate ? .idle : .celebrate }
+                        .onAppear {
+                            var a = pr.appearance
+                            let k = store.p.appearance
+                            a.primary = k.primary; a.secondary = k.secondary; a.shorts = k.shorts; a.socks = k.socks
+                            viewer.setCharacters([(a, pr.name, pr.model)])
+                            viewer.animation = .idle
+                            viewer.yaw = 0.25
+                            viewer.camera.position = SCNVector3Make(0, 1.1, 5.6)
+                            viewer.camera.look(at: SCNVector3Make(0, 0.95, 0))
+                        }
+                    ProspectCardView(prospect: pr, width: 110, level: store.p.prospects[pr.id] ?? 1, owned: owned)
+                } else {
+                    ProspectCardView(prospect: pr, width: 190, level: store.p.prospects[pr.id] ?? 1, owned: owned)
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(pr.name).font(.display(34)).foregroundStyle(.white)
                     Text("\(pr.nation.uppercased()) · \(pr.title.uppercased())").font(.label(12, .black)).foregroundStyle(Color(hex: pr.aura))
@@ -99,7 +122,7 @@ struct SquadView: View {
                         Text(howToGet(pr)).font(.label(12, .black)).foregroundStyle(Theme.pink)
                     }
                 }
-                .frame(width: 330, alignment: .leading)
+                .frame(width: 300, alignment: .leading)
             }
         }
     }

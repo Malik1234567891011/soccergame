@@ -655,6 +655,7 @@ extension MatchSim {
                 // on their side; weak ones dive in from too far or through the man.
                 let dBallMe = length(xz(state.ball.pos) - p.pos)
                 let goodMoment = min(d, dBallMe) < 1.25 && dBallMe <= d + 0.1 && dot(c.facingDir, normalized(c.pos - p.pos)) <= 0.55
+                    && length(xz(state.ball.pos) - c.pos) > 0.66
                 if goodMoment { chance += skill * 0.25 } else { chance *= 1.1 - skill }
                 if p.inFlow && p.loadout.playstyle == .enforcer { chance = 0.9 }
                 if rng.chance(chance) { brain.pressTackle = true }

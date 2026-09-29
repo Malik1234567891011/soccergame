@@ -1048,10 +1048,14 @@ public final class MatchSim {
                 let lunge = t - (slide ? 0.05 : 0.08)          // how far into the active window contact came
                 let clean = lunge < (slide ? 0.14 : 0.07)
                 let stretched = lunge > (slide ? 0.3 : 0.13)
+                // Read the touch: a ball knocked ahead (sprinting, heavy touch) is there to be won; one kept at the
+                // feet (close control, walking pace) is shielded.
+                let exposed = length(ballPos - o.pos)
                 var q: Float = 0.5
-                q += ballFirst ? 0.3 : -0.3
+                q += ballFirst ? 0.2 : -0.3
+                q += clampf((exposed - 0.62) * 2.0, -0.25, 0.3)
                 if fromBehind { q -= slide ? 0.45 : 0.3 }
-                q += clean ? 0.15 : (stretched ? -0.2 : 0)
+                q += clean ? 0.15 : (stretched ? -0.3 : 0)
                 q += (p.stats.defending - o.stats.control * 0.8) * 0.3
                 var chance = clampf(0.5 + (q - 0.5) * 2.2, 0.04, 0.97)
                 if wall { chance = 1 }
@@ -1078,7 +1082,8 @@ public final class MatchSim {
                     addHype(i, .tackle, 8)
                     if wall { takePossession(i) }
                 } else {
-                    // Carrier shrugs it off.
+                    // Carrier shrugs it off and rides the challenge (a burst away from the beaten defender).
+                    state.players[o.id].burstT = max(state.players[o.id].burstT, 0.35)
                     state.players[i].action = .stumble
                     state.players[i].actionT = 0
                     state.players[i].actionDur = slide ? 0.7 : 0.45
