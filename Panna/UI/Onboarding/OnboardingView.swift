@@ -14,6 +14,10 @@ struct OnboardingView: View {
     var body: some View {
         ZStack {
             AppBackground(accent: Theme.pink)
+            if !store.p.tutorialDone, let key = Art.image("keyart") {
+                Image(uiImage: key).resizable().scaledToFill().ignoresSafeArea()
+                    .overlay(LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.75)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+            }
             if !store.p.tutorialDone { splash } else { creator }
         }
         .onAppear {

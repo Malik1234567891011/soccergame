@@ -176,6 +176,8 @@ struct Profile: Codable {
     var selection: SelectionRun? = nil
     var selectionBest = 0
     var selectionRuns = 0
+    var passXP = 0
+    var passClaimed: Set<Int> = []
 
     // MARK: Derived
     var xpToNext: Int { 120 + (level - 1) * 40 }
@@ -406,6 +408,7 @@ final class ProfileStore: ObservableObject {
         p.coins += s.coins
         p.gems += s.gems
         p.xp += xp
+        p.passXP += s.xp
         while p.xp >= p.xpToNext {
             p.xp -= p.xpToNext
             p.level += 1
@@ -432,6 +435,19 @@ final class ProfileStore: ObservableObject {
         case .perfectStrikes(let n): return r.perfect >= n
         case .winInTime: return r.won && !r.goldenGoal
         }
+    }
+
+    func claimPass(_ tier: Int) {
+        guard p.passXP / StreetPass.xpPerTier >= tier, !p.passClaimed.contains(tier) else { return }
+        p.passClaimed.insert(tier)
+        switch StreetPass.reward(tier) {
+        case .coins(let n): p.coins += n
+        case .gems(let n): p.gems += n
+        case .shards(let n): p.shards += n
+        case .pack: p.gems += ProfileStore.packCost
+        case .cosmetic(let id): p.unlocked.insert(id)
+        }
+        save()
     }
 
     func claim(_ q: Quest) {

@@ -38,6 +38,9 @@ struct AppBackground: View {
     var body: some View {
         ZStack {
             LinearGradient(colors: [Color(hex: 0x0B0E22), Theme.bg, Color(hex: 0x140818)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let key = Art.image("keyart") {
+                Image(uiImage: key).resizable().scaledToFill().opacity(0.13).blur(radius: 2).ignoresSafeArea()
+            }
             // Diagonal speed streaks.
             TimelineView(.animation(minimumInterval: 1 / 30)) { tl in
                 let time = tl.date.timeIntervalSinceReferenceDate

@@ -298,6 +298,7 @@ struct ProfileView: View {
                 .frame(width: 240)
             }
             .padding(.top, 40)
+            VStack { Spacer(); StreetPassView().frame(width: 760).padding(.bottom, 12) }
             VStack {
                 TopBar(title: nil, onBack: { app.go(.home) })
                 Spacer()
