@@ -85,7 +85,7 @@ enum Objective: Hashable {
         switch self {
         case .win: return "Win the match"
         case .winBy(let n): return "Win by \(n)+ goals"
-        case .score(let n): return "Score \(n) goals yourself"
+        case .score(let n): return n == 1 ? "Score a goal yourself" : "Score \(n) goals yourself"
         case .nutmegs(let n): return "Nutmeg \(n) opponent\(n > 1 ? "s" : "")"
         case .flowGoal: return "Score while in FLOW"
         case .cleanSheet: return "Keep a clean sheet"

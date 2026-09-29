@@ -1080,7 +1080,8 @@ public final class MatchSim {
                     state.players[i].touchCooldown = 0
                     emit(.tackleWon(tackler: i, victim: o.id, slide: slide))
                     addHype(i, .tackle, 8)
-                    if wall { takePossession(i) }
+                    // A clean, well-timed standing tackle comes away with the ball; a scrappy one only pokes it loose.
+                    if wall || (!slide && clean && ballFirst) { takePossession(i) }
                 } else {
                     // Carrier shrugs it off and rides the challenge (a burst away from the beaten defender).
                     state.players[o.id].burstT = max(state.players[o.id].burstT, 0.35)

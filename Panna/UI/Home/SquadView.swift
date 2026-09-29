@@ -283,6 +283,10 @@ struct CareerView: View {
                     .frame(width: 240)
                 }
             }
+            // Its own panel: the chapter art behind must never bleed through the text.
+            .padding(26)
+            .background(RoundedRectangle(cornerRadius: 20).fill(Theme.panel.opacity(0.97)))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.12)))
         }
     }
 }
