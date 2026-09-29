@@ -336,15 +336,19 @@ final class CharacterRig {
         let a = p.runPhase / stride * 2 * .pi
         // Locomotion base.
         if amp > 0.05 {
-            let sw: Float = 0.95 * amp
+            // Sprinting: longer stride, higher knee drive, a real arm pump tucked in to the body.
+            let sw: Float = (p.sprint ? 1.12 : 0.95) * amp
+            let knee: Float = p.sprint ? 1.6 : 1.35
+            let arm: Float = p.sprint ? 1.0 : 0.8
             hipL.x = -sin(a) * sw
             hipR.x = sin(a) * sw
-            kneeL.x = max(0, cos(a)) * 1.35 * amp + 0.1
-            kneeR.x = max(0, -cos(a)) * 1.35 * amp + 0.1
-            shL.x = sin(a) * 0.8 * amp
-            shR.x = -sin(a) * 0.8 * amp
-            elL.x = -0.4 - amp * 0.8
-            elR.x = -0.4 - amp * 0.8
+            kneeL.x = max(0, cos(a)) * knee * amp + 0.1
+            kneeR.x = max(0, -cos(a)) * knee * amp + 0.1
+            shL.x = sin(a) * arm * amp
+            shR.x = -sin(a) * arm * amp
+            shL.z = p.sprint ? -0.05 * amp : 0; shR.z = p.sprint ? 0.05 * amp : 0
+            elL.x = -0.4 - amp * (p.sprint ? 1.0 : 0.8)
+            elR.x = -0.4 - amp * (p.sprint ? 1.0 : 0.8)
             spineR.x = 0.12 + amp * (p.sprint ? 0.28 : 0.16)
             spineR.y = sin(a) * 0.12 * amp
             hipsY = hipHeight - 0.03 * amp + abs(sin(a)) * 0.06 * amp
