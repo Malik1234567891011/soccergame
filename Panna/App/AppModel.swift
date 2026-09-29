@@ -33,7 +33,8 @@ final class AppModel: ObservableObject {
         let env = ProcessInfo.processInfo.environment
         if env["PANNA_SHOWCASE"] != nil { screen = .showcase; return }
         if let s = env["PANNA_SCREEN"] {
-            store.p.onboarded = true; store.p.tutorialDone = true
+            store.p.tutorialDone = true
+            if s != "onboarding" { store.p.onboarded = true }
             screen = ["locker": .locker, "squad": .squad, "scout": .scout, "career": .career, "profile": .profile, "shop": .shop, "online": .online, "onboarding": .onboarding, "selection": .selection, "moments": .moments][s] ?? .home
         }
         if env["PANNA_QUICK"] != nil {
@@ -145,9 +146,10 @@ final class AppModel: ObservableObject {
             rules.duration = 90; rules.goalsToWin = 3
             venue = ArenaTheme.all[(run.round - 1) / 3 % ArenaTheme.all.count]
         case .tutorial:
-            aiSkill = 0.1
+            aiSkill = 0.08
             oppName = "Night Shift"
-            rules.duration = 120
+            rules.duration = 180
+            rules.goalsToWin = 3
             venue = .cage
         default:
             aiSkill = Float(quickSkill)

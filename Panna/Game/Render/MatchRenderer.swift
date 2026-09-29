@@ -33,6 +33,7 @@ final class MatchRenderer {
     let teamColors: [UIColor]
     let humanId: Int
     var localHumans: Set<Int>
+    let infos: [RenderPlayerInfo]
 
     // Camera state
     var camTarget = SIMD3<Float>(0, 0, 0)
@@ -51,6 +52,7 @@ final class MatchRenderer {
         self.teamColors = teamColors
         self.humanId = humanId
         self.localHumans = localHumans
+        self.infos = players
         arena = ArenaBuilder(theme: theme, shape: shape)
         trail = FX.trail(color: UIColor(hex: players[max(0, humanId)].appearance.trail))
         arena.build(into: scene)

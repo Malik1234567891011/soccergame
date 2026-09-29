@@ -37,7 +37,7 @@ struct LegacyCardView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     RarityBadge(rarity: card.rarity).scaleEffect(width / 170, anchor: .leading)
                     Text(card.title).font(.display(width * 0.13)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
-                    Text(card.legend.uppercased()).font(.label(width * 0.065, .black)).foregroundStyle(Color(hex: card.tint)).lineLimit(1)
+                    Text(card.legend.uppercased()).font(.label(width * 0.065, .black)).foregroundStyle(Color(hex: card.tint)).lineLimit(1).minimumScaleFactor(0.6)
                     Text(card.slotName).font(.label(width * 0.055, .black)).foregroundStyle(.white.opacity(0.6))
                     if copies > 1 {
                         HStack(spacing: 1) { ForEach(0..<min(5, copies), id: \.self) { _ in Image(systemName: "star.fill").font(.system(size: width * 0.06)) } }
@@ -71,7 +71,7 @@ struct ProspectCardView: View {
                         RarityBadge(rarity: prospect.rarity).scaleEffect(width / 170, anchor: .leading)
                     }
                     Text(prospect.name).font(.display(width * 0.15)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
-                    Text(prospect.nation.uppercased()).font(.label(width * 0.055, .black)).foregroundStyle(.white.opacity(0.75)).lineLimit(1)
+                    Text(prospect.nation.uppercased()).font(.label(width * 0.055, .black)).foregroundStyle(.white.opacity(0.75)).lineLimit(1).minimumScaleFactor(0.6)
                     Text(prospect.title.uppercased()).font(.label(width * 0.065, .black)).foregroundStyle(Color(hex: prospect.aura))
                     Text(prospect.playstyle.rawValue.uppercased() + (owned ? " · LV \(level)" : "")).font(.label(width * 0.058, .black)).foregroundStyle(.white.opacity(0.65))
                 }

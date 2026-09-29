@@ -10,6 +10,7 @@ struct OnboardingView: View {
     @State private var draft = ProfileStore.starterLook()
     @State private var name = ""
     @State private var pulse = false
+    @State private var weapon: Playstyle = .winger
 
     var body: some View {
         ZStack {
@@ -54,9 +55,9 @@ struct OnboardingView: View {
         HStack(spacing: 0) {
             StageView(stage: stage).frame(width: 340)
             VStack(alignment: .leading, spacing: 12) {
-                Text("WHO ARE YOU?").font(.display(34)).foregroundStyle(.white)
-                Text("That was you on the cage pitch. Now make them yours — you can change everything later in the Locker.")
-                    .font(.label(12)).foregroundStyle(.white.opacity(0.7)).frame(width: 400, alignment: .leading)
+                Text("WHO ARE YOU?").font(.display(30)).foregroundStyle(.white)
+                Text("Make them yours. You can change anything later in the Locker.")
+                    .font(.label(12)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true).frame(width: 420, alignment: .leading)
                 TextField("", text: $name, prompt: Text("YOUR NAME").foregroundStyle(.white.opacity(0.35)))
                     .font(.display(24)).foregroundStyle(.white)
                     .padding(.horizontal, 14).frame(width: 300, height: 48)
@@ -94,6 +95,12 @@ struct OnboardingView: View {
                     ForEach(Appearance.eyeColors.indices.prefix(5), id: \.self) { i in dot(Color(hex: Appearance.eyeColors[i]), draft.eyeColor == i, ring: true) { draft.eyeColor = i; refresh() } }
                 }
                 }
+                row("WEAPON") {
+                    ForEach(Playstyle.allCases, id: \.self) { ps in
+                        chip(ps.rawValue.uppercased(), weapon == ps) { weapon = ps; AudioEngine.shared.play(.uiTap, volume: 0.5) }
+                    }
+                }
+                Text(weaponLine).font(.label(10)).foregroundStyle(Theme.gold).frame(width: 420, alignment: .leading)
                 row("KIT") {
                     ForEach(LockerView.kitColors.prefix(11), id: \.self) { c in
                         dot(Color(hex: c), draft.primary == c) { draft.primary = c; draft.socks = c; draft.secondary = c == 0xFFFFFF ? 0x16181F : 0xFFFFFF; draft.shorts = 0x16181F; refresh() }
@@ -102,6 +109,7 @@ struct OnboardingView: View {
                 GlowButton(title: "THIS IS ME", icon: "checkmark", height: 54) {
                     store.p.name = Moderation.clean(name, fallback: "Rookie")
                     store.p.appearance = draft
+                    store.p.loadout.playstyle = weapon
                     store.p.onboarded = true
                     store.p.gems += 160   // welcome gift: one Scout pack
                     store.save()
@@ -111,6 +119,16 @@ struct OnboardingView: View {
                 .frame(width: 260)
             }
             .padding(.top, 20)
+        }
+    }
+
+    var weaponLine: String {
+        switch weapon {
+        case .winger: return "Pure pace. FLOW: Afterburner."
+        case .maestro: return "Sees every pass. FLOW: Vision."
+        case .finisher: return "Lives in the box. FLOW: Ice Veins."
+        case .enforcer: return "Wins it back. FLOW: The Wall."
+        case .trickster: return "Street magic. FLOW: Showtime."
         }
     }
 
@@ -190,8 +208,9 @@ struct TutorialCoach: View {
             default: break
             }
         }
-        let time = controller.state.time
-        moved = time > 5
+        let st = controller.state
+        let time = st.time
+        moved = me >= 0 && st.players[me].runPhase > 4
         if !moved { return 0 }
         if !passed { return 1 }
         if !shot { return 2 }

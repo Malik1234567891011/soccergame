@@ -109,9 +109,9 @@ struct PostMatchView: View {
                     }
                     Spacer()
                     HStack(spacing: 12) {
-                        GlowButton(title: primaryTitle, icon: "arrow.clockwise", height: 58) { app.rematch() }
+                        GlowButton(title: primaryTitle, icon: isTutorial ? "person.fill" : "arrow.clockwise", height: 58) { if isTutorial { app.leavePostMatch() } else { app.rematch() } }
                             .frame(width: 230)
-                        if let m = app.match, !m.highlights.isEmpty {
+                        if !isTutorial, let m = app.match, !m.highlights.isEmpty {
                             Button { showClip = true } label: {
                                 Label("CLIP IT", systemImage: "film.stack").font(.display(16)).foregroundStyle(.black)
                                     .frame(width: 130, height: 52)
@@ -119,7 +119,7 @@ struct PostMatchView: View {
                             }
                             .buttonStyle(PressStyle())
                         }
-                        Button {
+                        if !isTutorial { Button {
                             AudioEngine.shared.play(.uiBack)
                             app.leavePostMatch()
                         } label: {
@@ -127,7 +127,7 @@ struct PostMatchView: View {
                                 .frame(width: 130, height: 52)
                                 .background(Skew(amount: 13).fill(.white.opacity(0.1)))
                         }
-                        .buttonStyle(PressStyle())
+                        .buttonStyle(PressStyle()) }
                     }
                     .padding(.bottom, 14)
                 }
@@ -150,7 +150,10 @@ struct PostMatchView: View {
 
     func isMoment(_ r: MatchReport) -> Bool { if case .moment = r.mode { return true }; return false }
 
+    var isTutorial: Bool { if case .tutorial = app.lastReport?.mode { return true }; return false }
+
     var primaryTitle: String {
+        if isTutorial { return "CREATE YOUR PLAYER" }
         if case .selection = app.lastReport?.mode {
             if store.p.selection?.over == true { return "RUN SUMMARY" }
             return app.lastReport?.won == true ? "DEVOUR AN EGO" : "BACK TO THE RUN"
@@ -179,7 +182,7 @@ struct PostMatchView: View {
                 Image(systemName: icon).foregroundStyle(color)
                 Text(value).font(.label(14, .black)).foregroundStyle(.white)
             }
-            if let s = sub { Text(s.uppercased()).font(.label(8, .black)).foregroundStyle(color).lineLimit(1) }
+            if let s = sub { Text(s.uppercased()).font(.label(8, .black)).foregroundStyle(color).lineLimit(1).minimumScaleFactor(0.6) }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.panel))
@@ -196,8 +199,8 @@ struct PostMatchView: View {
         shownValue = w.valueBefore
         xpFrac = w.xpFractionBefore
         if let r = app.lastReport, let m = app.match, r.mvpPlayer >= 0, r.mvpPlayer < m.renderer.rigs.count {
-            let look = m.renderer.rigs[r.mvpPlayer].appearance
-            stage.setCharacters([(look, r.mvpName)])
+            let info = m.renderer.infos[r.mvpPlayer]
+            stage.setCharacters([(info.appearance, r.mvpName, info.model)])
             stage.animation = r.won || !r.mvp ? .celebrate : .idle
             stage.yaw = 0.25
         }

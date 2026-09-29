@@ -78,7 +78,7 @@ struct OnlineBody: View {
         HStack(spacing: 8) {
             Circle().fill(color).frame(width: 9, height: 9)
             Text(text).font(.label(12, .black)).foregroundStyle(.white.opacity(0.85))
-            if let e = client.error { Text(e).font(.label(11)).foregroundStyle(Theme.pink).lineLimit(1) }
+            if let e = client.error { Text(e).font(.label(11)).foregroundStyle(Theme.pink).lineLimit(1).minimumScaleFactor(0.6) }
             Spacer()
             if client.status == .offline {
                 Button("RETRY") { client.connect(app.hello()) }.font(.label(11, .black)).foregroundStyle(Theme.cyan)
@@ -144,7 +144,7 @@ struct OnlineBody: View {
             if let r = client.room {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("ROOM \(r.code)").font(.display(20)).foregroundStyle(Theme.gold)
-                    Text(r.members.joined(separator: " · ")).font(.label(11)).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+                    Text(r.members.joined(separator: " · ")).font(.label(11)).foregroundStyle(.white.opacity(0.8)).lineLimit(1).minimumScaleFactor(0.6)
                 }
                 Spacer()
                 if r.host {
@@ -181,7 +181,7 @@ struct OnlineBody: View {
                     ForEach(Array(client.leaderboard.enumerated()), id: \.element.id) { i, e in
                         HStack(spacing: 8) {
                             Text("\(i + 1)").font(.display(14)).foregroundStyle(i < 3 ? Theme.gold : .white.opacity(0.6)).frame(width: 26)
-                            Text(e.name).font(.label(12, .black)).foregroundStyle(e.id == store.p.id ? Theme.green : .white).lineLimit(1)
+                            Text(e.name).font(.label(12, .black)).foregroundStyle(e.id == store.p.id ? Theme.green : .white).lineLimit(1).minimumScaleFactor(0.6)
                             Spacer()
                             Text(rankName(e.rp)).font(.label(10, .black)).foregroundStyle(Color(hex: Catalog.tierColors[min(5, e.rp / 300)]))
                             Text("\(e.rp)").font(.label(12, .black)).monospacedDigit().foregroundStyle(.white.opacity(0.8)).frame(width: 44, alignment: .trailing)
@@ -218,7 +218,7 @@ struct OnlineBody: View {
                     VStack(spacing: 3) {
                         ForEach(c.members) { m in
                             HStack {
-                                Text(m.name).font(.label(12, .black)).foregroundStyle(m.id == store.p.id ? Theme.green : .white).lineLimit(1)
+                                Text(m.name).font(.label(12, .black)).foregroundStyle(m.id == store.p.id ? Theme.green : .white).lineLimit(1).minimumScaleFactor(0.6)
                                 Spacer()
                                 Text("\(m.points) pts").font(.label(11)).foregroundStyle(.white.opacity(0.7))
                             }
@@ -227,7 +227,7 @@ struct OnlineBody: View {
                         Text("CREW RANKINGS").font(.label(10, .black)).foregroundStyle(.white.opacity(0.6)).frame(maxWidth: .infinity, alignment: .leading)
                         ForEach(Array(client.crewBoard.prefix(10).enumerated()), id: \.element.id) { i, e in
                             HStack {
-                                Text("\(i + 1). [\(e.tag)] \(e.name)").font(.label(11, .black)).foregroundStyle(e.id == c.code ? Theme.gold : .white).lineLimit(1)
+                                Text("\(i + 1). [\(e.tag)] \(e.name)").font(.label(11, .black)).foregroundStyle(e.id == c.code ? Theme.gold : .white).lineLimit(1).minimumScaleFactor(0.6)
                                 Spacer()
                                 Text("\(e.points)").font(.label(11)).foregroundStyle(.white.opacity(0.7))
                             }

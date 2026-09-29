@@ -116,7 +116,7 @@ struct VersusCard: View {
             Text(name.uppercased()).font(.display(26)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
                 .shadow(color: .black.opacity(0.7), radius: 0, x: 3, y: 3)
             Text((0..<3).map { controller.playerNames[team * 4 + $0] }.joined(separator: " · ").uppercased())
-                .font(.label(11, .black)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                .font(.label(11, .black)).foregroundStyle(.white.opacity(0.85)).lineLimit(1).minimumScaleFactor(0.6)
         }
         .frame(width: 320, alignment: align == .leading ? .leading : .trailing)
     }
