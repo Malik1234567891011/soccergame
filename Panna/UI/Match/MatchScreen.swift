@@ -32,6 +32,9 @@ struct MatchScreen: View {
             SceneViewHost(controller: controller)
                 .ignoresSafeArea()
             MatchHUD(hud: controller.hud, banners: controller.banners, onPause: { controller.paused = true; showMenu = true })
+            if let c = controller.cutIn {
+                CutInView(cut: c).id(c.id).allowsHitTesting(false)
+            }
             if controller.hud.phase != .ended && !showMenu && controller.humanId >= 0 {
                 MatchControls(input: controller.input, hud: controller.hud)
             }
@@ -213,6 +216,56 @@ struct PauseOverlay: View {
                         .foregroundStyle(.white)
                 }
             }
+        }
+    }
+}
+
+
+/// Anime skill cut-in: a diagonal slash panel with the character's portrait racing across the screen.
+struct CutInView: View {
+    let cut: CutIn
+    @State private var t: CGFloat = 0
+    var body: some View {
+        GeometryReader { g in
+            ZStack {
+                Color.black.opacity(0.35 * Double(1 - abs(t - 0.5) * 2)).ignoresSafeArea()
+                ZStack(alignment: .leading) {
+                    Skew(amount: 60)
+                        .fill(LinearGradient(colors: [cut.color, cut.color.opacity(0.6), .black], startPoint: .leading, endPoint: .trailing))
+                    // Speed lines.
+                    Canvas { ctx, size in
+                        for i in 0..<26 {
+                            let y = CGFloat(i) / 26 * size.height
+                            var p = Path(); p.move(to: CGPoint(x: 0, y: y)); p.addLine(to: CGPoint(x: size.width, y: y + 6))
+                            ctx.stroke(p, with: .color(.white.opacity(i % 3 == 0 ? 0.35 : 0.12)), lineWidth: i % 4 == 0 ? 2.5 : 1)
+                        }
+                    }
+                    HStack(spacing: 18) {
+                        if let name = cut.portrait, let img = Art.image(name) {
+                            Image(uiImage: img).resizable().scaledToFill()
+                                .frame(width: 190, height: 150).clipped()
+                                .mask(Skew(amount: 40))
+                                .overlay(Skew(amount: 40).stroke(.white, lineWidth: 3))
+                                .shadow(color: .black.opacity(0.6), radius: 10)
+                        }
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(cut.title).font(.display(64)).foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.7), radius: 0, x: 5, y: 5)
+                            Text(cut.subtitle.uppercased()).font(.label(16, .black)).tracking(4).foregroundStyle(.black)
+                                .padding(.horizontal, 10).padding(.vertical, 3).background(Capsule().fill(.white))
+                        }
+                    }
+                    .padding(.leading, 70)
+                }
+                .frame(width: g.size.width * 1.2, height: 170)
+                .rotationEffect(.degrees(-6))
+                .offset(x: (t < 0.2 ? (1 - t / 0.2) : (t > 0.8 ? -(t - 0.8) / 0.2 : 0)) * g.size.width * 1.2)
+                .position(x: g.size.width / 2, y: g.size.height * 0.46)
+            }
+        }
+        .onAppear {
+            AudioEngine.shared.play(.flow, volume: 0.8)
+            withAnimation(.linear(duration: 1.2)) { t = 1 }
         }
     }
 }

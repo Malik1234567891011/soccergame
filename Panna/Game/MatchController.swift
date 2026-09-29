@@ -82,6 +82,14 @@ struct Banner: Identifiable, Equatable {
     var big = false
 }
 
+struct CutIn: Identifiable, Equatable {
+    let id = UUID()
+    var portrait: String?
+    var title: String
+    var subtitle: String
+    var color: Color
+}
+
 struct HUDState: Equatable {
     var score = [0, 0]
     var clock = "2:30"
@@ -109,6 +117,9 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
     @Published var banners: [Banner] = []
     @Published var finished = false
     @Published var paused = false
+    @Published var cutIn: CutIn?
+    /// Portrait art per player slot (look_xx / prospect_xx) for anime cut-ins.
+    var portraits: [String?] = Array(repeating: nil, count: 8)
     var onEvent: ((MatchEvent, MatchState) -> Void)?
     let humanId: Int
     let playerNames: [String]
@@ -142,6 +153,12 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         super.init()
         hud.teamNames = driver.state.teamNames
         hud.flowName = flowName
+        if ProcessInfo.processInfo.environment["PANNA_CUTIN"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                guard let self else { return }
+                self.showCutIn(CutIn(portrait: self.portraits[1] ?? self.portraits[0], title: "FLOW", subtitle: flowName, color: Color(hex: 0xFFD23B)))
+            }
+        }
     }
 
     func renderer(_ r: SCNSceneRenderer, updateAtTime time: TimeInterval) {
@@ -229,6 +246,14 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         }
     }
 
+    private func showCutIn(_ c: CutIn) {
+        DispatchQueue.main.async {
+            self.cutIn = c
+            let id = c.id
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.25) { if self.cutIn?.id == id { self.cutIn = nil } }
+        }
+    }
+
     private func haptic(_ g: UIImpactFeedbackGenerator, _ intensity: CGFloat = 1) {
         guard hapticsOn else { return }
         DispatchQueue.main.async { g.impactOccurred(intensity: intensity) }
@@ -281,7 +306,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             audio.crowdSwell(0.7)
             if a == humanId || humanId < 0 {
                 haptic(heavy)
-                banner(Banner(title: "PANNA!", subtitle: "through the legs of \(playerNames[v])", color: Color(hex: 0xFFD23B), big: true))
+                showCutIn(CutIn(portrait: portraits[a], title: "PANNA!", subtitle: "through the legs of \(playerNames[v])", color: Color(hex: 0x39FF88)))
             } else if v == humanId {
                 banner(Banner(title: "PANNA'D", subtitle: "\(playerNames[a]) went through you", color: Color(hex: 0xFF3B5C)))
             }
@@ -303,7 +328,9 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             audio.crowdSwell(0.6)
             if p == humanId {
                 haptic(heavy)
-                banner(Banner(title: "FLOW STATE", subtitle: flowName, color: Color(hex: 0xFFD23B), big: true))
+                if driver.allowsTimeWarp { hitstop = 0.35 }
+                renderer.fovPunch = 7
+                showCutIn(CutIn(portrait: portraits[p], title: "FLOW", subtitle: flowName, color: Color(hex: 0xFFD23B)))
             } else if humanId >= 0 && p / 4 != humanId / 4 {
                 banner(Banner(title: "\(playerNames[p].uppercased()) IS IN FLOW", color: Color(hex: 0xFF3B5C)))
             }

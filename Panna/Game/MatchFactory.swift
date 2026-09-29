@@ -65,7 +65,19 @@ enum MatchFactory {
                                      humanId: driver.localPlayer, localHumans: driver.localPlayer >= 0 ? [driver.localPlayer] : [])
         renderer.celebrations = infos.map { $0.celebration }
         let flow = driver.localPlayer >= 0 ? driver.state.players[driver.localPlayer].loadout.playstyle.flowName : "FLOW"
-        return MatchController(driver: driver, renderer: renderer, playerNames: names, flowName: flow)
+        let c = MatchController(driver: driver, renderer: renderer, playerNames: names, flowName: flow)
+        var portraits: [String?] = []
+        for team in [spec.home, spec.away] {
+            for i in 0..<3 {
+                let p = team[min(i, team.count - 1)]
+                if let m = p.model { portraits.append("prospect_" + m) }
+                else if let l = p.appearance.look { portraits.append("look_" + l) }
+                else { portraits.append(nil) }
+            }
+            portraits.append(nil)
+        }
+        c.portraits = portraits
+        return c
     }
 }
 
