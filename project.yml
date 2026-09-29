@@ -23,6 +23,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.malik.panna
+        # Device test builds run the real per-pixel work (kit recolour) at release speed.
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
         PRODUCT_NAME: Panna
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"

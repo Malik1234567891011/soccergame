@@ -68,8 +68,11 @@ enum KitRecolor {
         let P = rgb(kit.primary), S = rgb(kit.secondary), B = rgb(kit.shorts), G = rgb(kit.socks)
         mbuf.withUnsafeBufferPointer { mp in
         buf.withUnsafeMutableBufferPointer { p in
-            var i = 0
-            let n = w * h * 4
+          // Rows are independent: spread them across the cores (a match recolours 6–8 characters at load).
+          let chunks = 16
+          DispatchQueue.concurrentPerform(iterations: chunks) { c in
+            var i = (h * c / chunks) * w * 4
+            let n = (h * (c + 1) / chunks) * w * 4
             while i < n {
                 let region = Float(mp[i / 4]) / 255
                 let r = Float(p[i]) / 255, g = Float(p[i + 1]) / 255, b = Float(p[i + 2]) / 255
@@ -122,6 +125,7 @@ enum KitRecolor {
                 }
                 i += 4
             }
+          }
         }
         }
         guard let outCG = ctx.makeImage() else { return nil }
