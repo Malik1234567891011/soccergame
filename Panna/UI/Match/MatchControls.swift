@@ -152,6 +152,13 @@ struct ActionButton: View {
                 }
         )
         .animation(.spring(response: 0.18, dampingFraction: 0.6), value: pressed)
+        .accessibilityElement()
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            input.press(button)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { input.release(button) }
+        }
     }
 }
 
