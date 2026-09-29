@@ -135,9 +135,19 @@ struct MatchReport {
     var mvpPlayer = -1
 
     var goalDiff: Int { score[myTeam] - score[1 - myTeam] }
+    /// Link-up goals per Prospect teammate this match.
+    var linkUps: [String: Int] = [:]
+}
+
+enum Bond {
+    static let thresholds = [0, 2, 5, 9, 14, 20]
+    static func level(_ xp: Int) -> Int { thresholds.lastIndex { xp >= $0 } ?? 0 }
+    static func next(_ xp: Int) -> Int? { thresholds.first { $0 > xp } }
+    static let titles = ["STRANGERS", "TEAMMATES", "IN SYNC", "TELEPATHIC", "DUO", "LEGENDARY DUO"]
 }
 
 struct RewardSummary {
+    var bondUps: [String] = []
     var coins = 0
     var gems = 0
     var xp = 0
@@ -212,6 +222,8 @@ struct Profile: Codable {
     var selectionRuns = 0
     var passXP = 0
     var lookMigrated = false
+    /// Chemistry with each Prospect: goals you create together (you assist them or they assist you).
+    var bonds: [String: Int] = [:]
     var momentStars: [String: Int] = [:]
     var passPremium = false
     var passPremiumClaimed: Set<Int> = []
@@ -257,7 +269,7 @@ final class ProfileStore: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         url = dir.appendingPathComponent("profile.json")
         if ProcessInfo.processInfo.environment["PANNA_RESET"] != nil { try? FileManager.default.removeItem(at: url) }
-        if let d = try? Data(contentsOf: url), let prof = try? JSONDecoder().decode(Profile.self, from: d) {
+        if let d = try? Data(contentsOf: url), let prof = ProfileStore.lenientDecode(d) {
             p = prof
         } else {
             p = Profile()
@@ -271,6 +283,24 @@ final class ProfileStore: ObservableObject {
         p.unlocked.formUnion(Cosmetics.defaults)
         if let l = p.appearance.look { p.unlocked.insert("look.\(l)") }
         refreshDaily()
+    }
+
+    /// Saves written by older builds lack newer fields; synthesized Codable would reject them and the player
+    /// would silently start over. Merge the save over a default profile (recursively) before decoding.
+    static func lenientDecode(_ d: Data) -> Profile? {
+        if let prof = try? JSONDecoder().decode(Profile.self, from: d) { return prof }
+        guard let saved = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let baseData = try? JSONEncoder().encode(Profile()),
+              let base = try? JSONSerialization.jsonObject(with: baseData) as? [String: Any] else { return nil }
+        func merge(_ a: [String: Any], _ b: [String: Any]) -> [String: Any] {
+            var out = a
+            for (k, v) in b {
+                if let av = a[k] as? [String: Any], let bv = v as? [String: Any] { out[k] = merge(av, bv) } else { out[k] = v }
+            }
+            return out
+        }
+        guard let merged = try? JSONSerialization.data(withJSONObject: merge(base, saved)) else { return nil }
+        return try? JSONDecoder().decode(Profile.self, from: merged)
     }
 
     static func starterLook() -> Appearance {
@@ -447,6 +477,11 @@ final class ProfileStore: ObservableObject {
         p.stats.matches += 1
         if r.won { p.stats.wins += 1 } else if r.draw { p.stats.draws += 1 } else { p.stats.losses += 1 }
         p.stats.goals += r.goals; p.stats.assists += r.assists; p.stats.nutmegs += r.nutmegs; p.stats.flows += r.flows
+        for (id, n) in r.linkUps {
+            let before = Bond.level(p.bonds[id] ?? 0)
+            p.bonds[id, default: 0] += n
+            if Bond.level(p.bonds[id]!) > before { s.bondUps.append(id) }
+        }
         p.stats.tackles += r.tackles; p.stats.perfect += r.perfect
         if r.mvp { p.stats.mvps += 1 }
 

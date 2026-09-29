@@ -90,6 +90,12 @@ struct PostMatchView: View {
                             }
                             if !w.newStars.isEmpty { reward("star.fill", "+\(w.newStars.count)★", Theme.gold, "career") }
                             ForEach(w.questsCompleted) { q in reward("checkmark.seal.fill", "QUEST", Theme.green, q.text) }
+                            // Chemistry: goals built with a teammate.
+                            ForEach(Array(r.linkUps.keys.sorted()), id: \.self) { id in
+                                let xp = store.p.bonds[id] ?? 0
+                                reward("link", "+\(r.linkUps[id] ?? 0) BOND", Theme.cyan,
+                                       (Catalog.prospect(id)?.name ?? id) + " · " + (w.bondUps.contains(id) ? "NOW " : "") + Bond.titles[Bond.level(xp)])
+                            }
                         }
                         .opacity(step >= 2 ? 1 : 0)
                         if let rec = w.recruited, let pr = Catalog.prospect(rec) {

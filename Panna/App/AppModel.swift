@@ -10,6 +10,7 @@ struct PendingMatch {
     var theme: ArenaTheme
     var stage: CareerStage?
     var opponentName: String
+    var teammates: [String] = []   // Prospect ids at home slots 1, 2
 }
 
 @MainActor
@@ -59,14 +60,15 @@ final class AppModel: ObservableObject {
                            appearance: p.appearance, celebration: p.celebration)
     }
 
-    func prospectParticipant(_ id: String, kit: Appearance?, level: Int) -> Participant {
+    func prospectParticipant(_ id: String, kit: Appearance?, level: Int, bond: Int = 0) -> Participant {
         let pr = Catalog.prospect(id)!
         var a = pr.appearance
         if let k = kit {
             a.primary = k.primary; a.secondary = k.secondary; a.shirtPattern = k.shirtPattern
             a.shorts = k.shorts; a.socks = k.socks
         }
-        let lvl = Float(max(1, level)) * 0.4
+        // Duplicates level them up; chemistry with you adds a little on top (never enough to carry a solo player).
+        let lvl = Float(max(1, level)) * 0.4 + Float(Bond.level(bond)) * 0.15
         let b = pr.bonus
         let bonus = PlayerStats(pace: b.pace * lvl, control: b.control * lvl, shooting: b.shooting * lvl,
                                 passing: b.passing * lvl, defending: b.defending * lvl, physical: b.physical * lvl)
@@ -160,8 +162,10 @@ final class AppModel: ObservableObject {
         let myKit = store.p.appearance
         var home = [mySetup(human: !bots)]
         // Playing as a Prospect yourself: they don't also appear as a teammate.
+        var mates: [String] = []
         for id in store.p.squad.filter({ $0 != myKit.look }).prefix(2) {
-            home.append(prospectParticipant(id, kit: myKit, level: store.p.prospects[id] ?? 1))
+            home.append(prospectParticipant(id, kit: myKit, level: store.p.prospects[id] ?? 1, bond: store.p.bonds[id] ?? 0))
+            mates.append(id)
         }
         while home.count < 3 { home.append(prospectParticipant(myKit.look == "rex" ? "juno" : "rex", kit: myKit, level: 1)) }
         var away = crew(oppName, skill: aiSkill, boss: boss)
@@ -187,7 +191,7 @@ final class AppModel: ObservableObject {
         if let d = ProcessInfo.processInfo.environment["PANNA_DURATION"], let f = Float(d) { rules.duration = f; rules.introTime = 1 }
         spec.rules = rules
         if case .selection = mode { spec.homeMods = Selection.mods(store.p.selection?.perks ?? []) }
-        pending = PendingMatch(mode: mode, theme: venue, stage: stage, opponentName: oppName)
+        pending = PendingMatch(mode: mode, theme: venue, stage: stage, opponentName: oppName, teammates: mates)
         let m = MatchFactory.offline(spec)
         m.hapticsOn = store.p.settings.haptics
         if let b = boss, let pr = Catalog.prospect(b) {
@@ -298,6 +302,9 @@ final class AppModel: ObservableObject {
         let p = s.players[me]
         r.goals = p.goals; r.assists = p.assists; r.nutmegs = p.nutmegs; r.tackles = p.tacklesWon
         r.skills = p.skillsBeat; r.shots = p.shots; r.interceptions = p.interceptions
+        for (slot, id) in pend.teammates.enumerated() where slot + 1 < m.linkUps.count && m.linkUps[slot + 1] > 0 {
+            r.linkUps[id] = m.linkUps[slot + 1]
+        }
         r.conceded = s.score[1 - myTeam]
         r.goldenGoal = s.goldenGoal
         r.won = !forfeit && s.score[myTeam] > s.score[1 - myTeam]

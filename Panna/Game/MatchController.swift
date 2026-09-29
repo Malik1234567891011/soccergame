@@ -124,6 +124,8 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
     @Published var banners: [Banner] = []
     @Published var finished = false
     @Published var paused = false
+    /// Goals the human created with each teammate (index = player id).
+    var linkUps = [Int](repeating: 0, count: 8)
     @Published var cutIn: CutIn?
     var bossIntro: CutIn? {
         didSet {
@@ -352,6 +354,15 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             let us = humanId >= 0 && team == humanId / 4
             var sub = own ? "OWN GOAL" : name.uppercased()
             if let a = assister, !own { sub += "  ·  assist \(playerNames[a])" }
+            if let a = assister, !own, humanId >= 0, team == humanId / 4 {
+                let mate = scorer == humanId ? a : (a == humanId ? scorer : -1)
+                if mate >= 0 && mate != humanId {
+                    linkUps[mate] += 1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        self.banner(Banner(title: "LINK-UP", subtitle: "chemistry with \(self.playerNames[mate]) +1", color: Color(hex: 0x3BE8FF)))
+                    }
+                }
+            }
             banner(Banner(title: us || humanId < 0 ? "GOAL!" : "CONCEDED", subtitle: sub, color: us || humanId < 0 ? Color(hex: 0xFFD23B) : Color(hex: 0xFF3B5C), big: true))
             if humanId >= 0 { DispatchQueue.main.async { self.notify.notificationOccurred(us ? .success : .error) } }
         case .save(let k, _):

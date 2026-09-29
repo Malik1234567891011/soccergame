@@ -108,6 +108,10 @@ struct SquadView: View {
                     Text("MOVES: \(Catalog.legacy(for: .skill(pr.skill))?.title ?? "STEP OVER") · \(Catalog.legacy(for: .shot(pr.shot))?.title ?? "LACES")").font(.label(11, .black)).foregroundStyle(.white.opacity(0.7))
                     if owned {
                         Text("LEVEL \(store.p.prospects[pr.id] ?? 1)/5 — duplicates level them up").font(.label(11)).foregroundStyle(Theme.gold)
+                        let bx = store.p.bonds[pr.id] ?? 0
+                        Text("CHEMISTRY: \(Bond.titles[Bond.level(bx)])" + (Bond.next(bx).map { " · \($0 - bx) link-up goals to next" } ?? " · MAX"))
+                            .font(.label(11, .black)).foregroundStyle(Theme.cyan)
+                        Text("Score from their pass, or set them up — chemistry makes them play better with you.").font(.label(10)).foregroundStyle(.white.opacity(0.55))
                         GlowButton(title: inSquad ? "IN SQUAD" : "ADD TO SQUAD", icon: inSquad ? "checkmark" : "plus", height: 48) {
                             guard !inSquad else { return }
                             var sq = store.p.squad
