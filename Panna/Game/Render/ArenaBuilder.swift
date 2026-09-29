@@ -25,8 +25,8 @@ final class ArenaBuilder {
         cage()
         goals()
         switch theme.props {
-        case .stadium: stands(rows: 9, dense: true)
-        default: stands(rows: 4, dense: false)
+        case .stadium: stands(rows: 6, dense: true)
+        default: stands(rows: 1, dense: false)
         }
         skyline()
         if theme.hasRoof { roof() }
@@ -54,7 +54,7 @@ final class ArenaBuilder {
         }
         scene.background.contents = img
         scene.lightingEnvironment.contents = img
-        scene.lightingEnvironment.intensity = t.night ? 0.9 : 1.4
+        scene.lightingEnvironment.intensity = t.night ? 0.35 : 1.1
         scene.fogColor = UIColor(hex: t.fog)
         scene.fogStartDistance = 45
         scene.fogEndDistance = 140
@@ -66,7 +66,7 @@ final class ArenaBuilder {
         let amb = SCNLight()
         amb.type = .ambient
         amb.color = UIColor(hex: t.ambient)
-        amb.intensity = t.night ? 220 : 520
+        amb.intensity = t.night ? 160 : 480
         let an = SCNNode(); an.light = amb
         root.addChildNode(an)
 
@@ -74,7 +74,7 @@ final class ArenaBuilder {
         let key = SCNLight()
         key.type = .directional
         key.color = UIColor(hex: t.key)
-        key.intensity = t.keyIntensity * (t.night ? 0.62 : 1)
+        key.intensity = t.keyIntensity * (t.night ? 0.45 : 1)
         key.castsShadow = true
         key.shadowMode = .deferred
         key.shadowMapSize = CGSize(width: 2048, height: 2048)
@@ -90,6 +90,23 @@ final class ArenaBuilder {
         kn.look(at: SCNVector3(0, 0, 0))
         root.addChildNode(kn)
 
+        // Pools of floodlight on the pitch — the look of a real night game.
+        if t.night {
+            for (x, z) in [(-9.0, -3.0), (9.0, -3.0), (-9.0, 4.0), (9.0, 4.0)] as [(Float, Float)] {
+                let sp = SCNLight()
+                sp.type = .spot
+                sp.color = UIColor(hex: t.flood)
+                sp.intensity = 2600
+                sp.spotInnerAngle = 30
+                sp.spotOuterAngle = 72
+                sp.attenuationStartDistance = 10
+                sp.attenuationEndDistance = 40
+                let sn = SCNNode(); sn.light = sp
+                sn.position = SCNVector3(x * 1.3, 16, z * 2.4)
+                sn.look(at: SCNVector3(x, 0, z))
+                root.addChildNode(sn)
+            }
+        }
         // Fill + rim from the opposite side for the vinyl sheen.
         let rim = SCNLight()
         rim.type = .directional
@@ -204,8 +221,8 @@ final class ArenaBuilder {
                 }
             }
             // Lines.
-            c.setStrokeColor(UIColor(hex: t.lines).withAlphaComponent(0.92).cgColor)
-            c.setLineWidth(0.12 * ppm)
+            c.setStrokeColor(UIColor(hex: t.lines).withAlphaComponent(0.78).cgColor)
+            c.setLineWidth(0.09 * ppm)
             c.addPath(outline.cgPath); c.strokePath()
             c.move(to: P(0, -W)); c.addLine(to: P(0, W)); c.strokePath()
             let cr: CGFloat = 3.2
@@ -314,18 +331,27 @@ final class ArenaBuilder {
             let out = PannaCore.dot(outward, mid) > 0 ? outward : -outward
             let ang = atan2(d.y, d.x)
             let isEnd = abs(w.a.x) == L && abs(w.b.x) == L
+            // Near side (facing the camera) stays low and open so it never blocks play.
+            let nearSide = !isEnd && mid.y > 0 && abs(d.x) > abs(d.y)
+            let nearCorner = mid.y > 0 && !isEnd && abs(d.x) <= abs(d.y) + 0.01 && abs(d.y) > 0.01
+            let bh: Float = (nearSide || nearCorner) ? 0.45 : boardH
             // Board
-            let board = SCNBox(width: CGFloat(len), height: CGFloat(boardH), length: 0.18, chamferRadius: 0.04)
+            let board = SCNBox(width: CGFloat(len), height: CGFloat(bh), length: 0.18, chamferRadius: 0.04)
             let ledM = led.copy() as! SCNMaterial
             ledM.emission.contentsTransform = SCNMatrix4MakeScale(max(1, Float(len) / 9), 1, 1)
             board.materials = [ledM, boardMat, ledM, boardMat, boardMat, boardMat]
             let bn = SCNNode(geometry: board)
-            bn.position = SCNVector3(mid.x + out.x * 0.12, boardH / 2, mid.y + out.y * 0.12)
+            bn.position = SCNVector3(mid.x + out.x * 0.12, bh / 2, mid.y + out.y * 0.12)
             bn.eulerAngles.y = -ang
             root.addChildNode(bn)
-            // Fence above (not on the near side — keeps the camera view clean).
-            let nearSide = !isEnd && mid.y > 0 && abs(d.x) > abs(d.y)
-            let fh = nearSide ? 1.4 : fenceH - boardH
+            // Neon tube along the top of the boards.
+            let tube = SCNCylinder(radius: 0.03, height: CGFloat(len))
+            let tn = Geo.node(tube, Mat.emissive(UIColor(hex: isEnd ? theme.neonB : theme.neonA), intensity: 2.5), at: SCNVector3(mid.x + out.x * 0.02, bh + 0.03, mid.y + out.y * 0.02))
+            tn.eulerAngles = SCNVector3(0, -ang, Float.pi / 2)
+            root.addChildNode(tn)
+            if nearSide || nearCorner { continue }
+            // Fence above.
+            let fh = fenceH - boardH
             let fence = SCNPlane(width: CGFloat(len), height: CGFloat(fh))
             let fm = fenceMat.copy() as! SCNMaterial
             fm.diffuse.contentsTransform = SCNMatrix4MakeScale(Float(len) / 0.6, fh / 0.6, 1)
@@ -346,11 +372,6 @@ final class ArenaBuilder {
             let rn = Geo.node(rail, postMat, at: SCNVector3(mid.x + out.x * 0.2, boardH + fh, mid.y + out.y * 0.2))
             rn.eulerAngles = SCNVector3(0, -ang, Float.pi / 2)
             root.addChildNode(rn)
-            // Neon tube along the top of the boards.
-            let tube = SCNCylinder(radius: 0.03, height: CGFloat(len))
-            let tn = Geo.node(tube, Mat.emissive(UIColor(hex: isEnd ? theme.neonB : theme.neonA), intensity: 2.5), at: SCNVector3(mid.x + out.x * 0.02, boardH + 0.03, mid.y + out.y * 0.02))
-            tn.eulerAngles = SCNVector3(0, -ang, Float.pi / 2)
-            root.addChildNode(tn)
         }
     }
 
@@ -428,7 +449,7 @@ final class ArenaBuilder {
         let bodyGeo = SCNCapsule(capRadius: 0.22, height: 0.9)
         let headGeo = SCNSphere(radius: 0.16)
         let palette: [UInt32] = [theme.neonA, theme.neonB, 0xFFFFFF, 0x222222, 0xFFD23B, 0x3B8CFF, 0xFF8A3B, 0x7A7A8A]
-        let mats = palette.map { Mat.pbr(UIColor(hex: $0).mixed(with: UIColor(hex: theme.fog), 0.25), rough: 0.8, rim: 0.2) }
+        let mats = palette.map { Mat.pbr(UIColor(hex: $0).mixed(with: UIColor(hex: theme.fog), 0.55).darker(0.35), rough: 0.9, rim: 0.35, rimColor: UIColor(hex: theme.flood)) }
         let skinMats = Appearance.skinTones.map { Mat.pbr(UIColor(hex: $0).mixed(with: UIColor(hex: theme.fog), 0.25), rough: 0.7, rim: 0) }
         var seed: UInt64 = 1234
         func rnd() -> UInt64 { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return seed >> 16 }
@@ -505,8 +526,41 @@ final class ArenaBuilder {
         }
     }
 
+    private func backdrop() -> Bool {
+        guard let url = Bundle.main.url(forResource: "backdrop_" + theme.id, withExtension: "jpg"),
+              let img = UIImage(contentsOfFile: url.path) else { return false }
+        // A curved painted panorama behind the far side of the cage.
+        let radius: Float = 46, span: Float = 2.7, height: Float = 64, segs = 40
+        var verts: [SCNVector3] = [], uvs: [CGPoint] = [], idx: [Int32] = []
+        for i in 0...segs {
+            let t = Float(i) / Float(segs)
+            let a = -Float.pi / 2 - span / 2 + span * t
+            let x = cos(a) * radius * 1.45, z = sin(a) * radius + 12
+            verts.append(SCNVector3(x, -24, z)); verts.append(SCNVector3(x, height - 24, z))
+            uvs.append(CGPoint(x: CGFloat(t), y: 1)); uvs.append(CGPoint(x: CGFloat(t), y: 0))
+        }
+        for i in 0..<segs {
+            let a = Int32(i * 2)
+            idx += [a, a + 2, a + 1, a + 1, a + 2, a + 3]
+        }
+        let g = SCNGeometry(sources: [SCNGeometrySource(vertices: verts), SCNGeometrySource(textureCoordinates: uvs)],
+                            elements: [SCNGeometryElement(indices: idx, primitiveType: .triangles)])
+        let m = SCNMaterial()
+        m.lightingModel = .constant
+        m.diffuse.contents = img
+        m.isDoubleSided = true
+        m.writesToDepthBuffer = false
+        g.materials = [m]
+        let n = SCNNode(geometry: g)
+        n.renderingOrder = -10
+        n.castsShadow = false
+        root.addChildNode(n)
+        return true
+    }
+
     private func skyline() {
         let t = theme
+        if backdrop() { return }
         if t.props == .underground { return }
         var seed: UInt64 = 555
         func rnd() -> Float { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return Float(seed >> 40) / Float(1 << 24) }

@@ -252,8 +252,8 @@ def lock_profile():
     cu.dimensions = '2D'
     sp = cu.splines.new('POLY')
     pts = []
-    for i in range(16):
-        a = i / 16 * 2 * math.pi
+    for i in range(10):
+        a = i / 10 * 2 * math.pi
         x = math.cos(a) * 0.1
         y = math.sin(a) * 0.07 + (0.02 * math.cos(a) ** 2 if math.sin(a) > 0 else 0)
         pts.append((x, y, 0, 1))
@@ -270,7 +270,7 @@ def strand(name, root, direction, length, radius, bend=Vector((0, 0, 0)), segs=4
     cu.bevel_object = lock_profile()
     cu.twist_mode = 'Z_UP'
     cu.use_map_taper = False
-    cu.resolution_u = 6
+    cu.resolution_u = 4
     cu.use_fill_caps = True
     sp = cu.splines.new('BEZIER')
     sp.bezier_points.add(segs - 1)
@@ -378,7 +378,160 @@ def hair_spiky():
     for s in (1, -1):
         root = HEAD_C + Vector((s * HEAD_R * 0.83, -0.03, HEAD_R * 0.25))
         parts.append(strand(f'side{s}', root, Vector((s * 0.15, -0.15, -1)), 0.16, 0.055))
-    return finish_hair('spiky', parts)
+    return finish_hair('spikes', parts)
+
+
+def lock(name, th, ph, d, ln, rad, bend=(0, 0.05, -0.1), inset=0.82):
+    n = sph(th, ph)
+    root = HEAD_C + Vector((n.x * HEAD_R * inset, n.y * HEAD_R * inset, n.z * HEAD_R * inset))
+    return strand(name, root, Vector(d), ln, rad, bend=Vector(bend))
+
+def ball(name, center, r):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=10, ring_count=7, radius=r, location=center)
+    o = bpy.context.active_object; o.name = name
+    return o
+
+
+def hairline(parts, n=6, length=0.1, rad=0.045, spread=1.0, seed=1):
+    """Short tapered locks along the front hairline so caps never read as helmets."""
+    import random
+    rnd = random.Random(seed)
+    for i in range(n):
+        t = (i / (n - 1) - 0.5) * 2 * spread     # -spread..spread
+        ph = t * 0.95
+        n_ = sph(0.95, ph)
+        root = HEAD_C + Vector((n_.x * HEAD_R * 0.98, n_.y * HEAD_R * 0.98, n_.z * HEAD_R * 1.0))
+        d = Vector((math.sin(ph) * 0.35, -0.45, -1.0))
+        parts.append(strand(f'hl{seed}_{i}', root, d, length * rnd.uniform(0.8, 1.25), rad, bend=Vector((0, -0.04, 0.02))))
+    for s in (1, -1):
+        root = HEAD_C + Vector((s * HEAD_R * 0.88, -0.02, HEAD_R * 0.3))
+        parts.append(strand(f'tb{seed}{s}', root, Vector((s * 0.1, -0.1, -1)), length * 0.9, rad * 0.9))
+    return parts
+
+def hair_buzz():
+    return finish_hair('buzz', [hair_cap(front=1.0, back=1.75, side=1.5, scale=1.025)])
+
+def hair_crop():
+    parts = [hair_cap(front=1.0, back=1.8, side=1.5, scale=1.05)]
+    for i, ph in enumerate((-0.5, -0.2, 0.15, 0.45)):
+        parts.append(lock(f'c{i}', 0.35, ph, (math.sin(ph) * 0.3, -0.7, 0.35), 0.12, 0.06))
+    for i, ph in enumerate((1.4, 2.2, 3.0, -2.2, -1.4)):
+        parts.append(lock(f't{i}', 0.45, ph, (math.sin(ph) * 0.4, math.cos(ph) * -0.4 + 0.3, 0.6), 0.1, 0.055))
+    hairline(parts, n=6, length=0.09, seed=2)
+    return finish_hair('crop', parts)
+
+def hair_fringe():
+    parts = [hair_cap(front=1.1, back=1.95, side=1.6, scale=1.07)]
+    for i in range(7):
+        x = -0.12 + i * 0.04
+        root = HEAD_C + Vector((x, -HEAD_R * 0.45, HEAD_R * 0.88))
+        parts.append(strand(f'f{i}', root, Vector((x * 0.8, -0.35, -1)), 0.2, 0.052, bend=Vector((0, -0.08, 0.02))))
+    for s in (1, -1):
+        for k in range(2):
+            root = HEAD_C + Vector((s * HEAD_R * 0.85, -0.02 + k * 0.05, HEAD_R * 0.45))
+            parts.append(strand(f's{s}{k}', root, Vector((s * 0.15, 0.05, -1)), 0.22, 0.055))
+    for i, ph in enumerate((2.4, 2.9, 3.4, 3.9)):
+        parts.append(lock(f'b{i}', 0.9, ph, (math.sin(ph) * 0.3, 0.4, -1), 0.2, 0.06))
+    return finish_hair('fringe', parts)
+
+def hair_afro():
+    parts = [hair_cap(front=1.05, back=1.8, side=1.55, scale=1.04)]
+    import random
+    rnd = random.Random(9)
+    for i in range(60):
+        th = rnd.uniform(0, 1.35); ph = rnd.uniform(0, 2 * math.pi)
+        if math.cos(ph) > 0.35 and th > 0.95: continue
+        n = sph(th, ph)
+        c = HEAD_C + Vector((n.x * 1.18, n.y * 1.15, n.z * 1.1)) * HEAD_R + Vector((0, 0.02, 0.05))
+        parts.append(ball(f'a{i}', c, rnd.uniform(0.07, 0.1)))
+    return finish_hair('afro', parts)
+
+def hair_mohawk():
+    parts = [hair_cap(front=1.0, back=1.7, side=1.45, scale=1.02)]
+    for i in range(7):
+        th = -0.75 + i * 0.3
+        ph = 0.0 if th >= 0 else math.pi
+        parts.append(lock(f'm{i}', abs(th), ph, (0, 0.35 + i * 0.12, 1.0), 0.24 - abs(i - 3) * 0.015, 0.1, bend=(0, 0.1, -0.05), inset=0.9))
+    return finish_hair('mohawk', parts)
+
+def hair_curls():
+    parts = [hair_cap(front=1.05, back=1.8, side=1.55, scale=1.06)]
+    import random
+    rnd = random.Random(3)
+    for i in range(34):
+        th = rnd.uniform(0.05, 1.05); ph = rnd.uniform(0, 2 * math.pi)
+        if math.cos(ph) > 0.6 and th > 0.8: continue
+        n = sph(th, ph)
+        c = HEAD_C + n * HEAD_R * 1.08
+        parts.append(ball(f'k{i}', c, rnd.uniform(0.045, 0.06)))
+    return finish_hair('curls', parts)
+
+def hair_locs():
+    parts = [hair_cap(front=1.05, back=1.85, side=1.55, scale=1.06)]
+    for i in range(18):
+        ph = i / 18 * 2 * math.pi
+        if math.cos(ph) > 0.7: continue
+        ln = 0.36 if math.cos(ph) < -0.2 else 0.26
+        parts.append(lock(f'l{i}', 0.75, ph, (math.sin(ph) * 0.45, math.cos(ph) * -0.25 + 0.2, -1), ln, 0.065, bend=(0, 0.02, -0.02), inset=1.0))
+    for i in range(6):
+        ph = (i - 2.5) * 0.3
+        parts.append(lock(f'top{i}', 0.2, ph, (math.sin(ph) * 0.6, -0.5, -0.4), 0.18, 0.05))
+    hairline(parts, n=5, length=0.12, rad=0.05, seed=6)
+    return finish_hair('locs', parts)
+
+def hair_bun():
+    parts = [hair_cap(front=1.1, back=1.85, side=1.55, scale=1.04)]
+    parts.append(ball('bun', HEAD_C + Vector((0, 0.1, HEAD_R * 1.12)), 0.1))
+    for s in (1, -1):
+        root = HEAD_C + Vector((s * HEAD_R * 0.7, -HEAD_R * 0.55, HEAD_R * 0.6))
+        parts.append(strand(f'fr{s}', root, Vector((s * 0.2, -0.3, -1)), 0.2, 0.04))
+    hairline(parts, n=5, length=0.11, seed=3)
+    return finish_hair('bun', parts)
+
+def hair_ponytail():
+    parts = [hair_cap(front=1.1, back=1.85, side=1.55, scale=1.05)]
+    root = HEAD_C + Vector((0, HEAD_R * 0.95, HEAD_R * 0.35))
+    parts.append(strand('tail', root, Vector((0, 0.5, -1)), 0.45, 0.085, bend=Vector((0, 0.15, 0.05))))
+    for i, x in enumerate((-0.08, 0.0, 0.08)):
+        root = HEAD_C + Vector((x, -HEAD_R * 0.55, HEAD_R * 0.8))
+        parts.append(strand(f'f{i}', root, Vector((x * 2, -0.5, -0.9)), 0.15, 0.05))
+    hairline(parts, n=5, length=0.11, seed=4)
+    return finish_hair('ponytail', parts)
+
+def hair_hightop():
+    parts = [hair_cap(front=1.0, back=1.7, side=1.45, scale=1.03)]
+    bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=HEAD_R * 0.9, depth=0.2, location=HEAD_C + Vector((0, 0.01, HEAD_R * 0.98)))
+    cyl = bpy.context.active_object
+    bev = cyl.modifiers.new('bev', 'BEVEL'); bev.width = 0.04; bev.segments = 4
+    bpy.context.view_layer.objects.active = cyl; cyl.select_set(True)
+    bpy.ops.object.modifier_apply(modifier='bev'); cyl.select_set(False)
+    parts.append(cyl)
+    return finish_hair('highTop', parts)
+
+def hair_cornrows():
+    parts = [hair_cap(front=1.0, back=1.8, side=1.5, scale=1.025)]
+    for i in range(6):
+        x = (i - 2.5) * 0.05
+        pts = []
+        cu = bpy.data.curves.new(f'row{i}', 'CURVE'); cu.dimensions = '3D'; cu.bevel_depth = 0.022; cu.bevel_resolution = 2
+        sp = cu.splines.new('POLY'); sp.points.add(9)
+        for k in range(10):
+            th = -1.0 + k * 0.28
+            n = sph(abs(th), 0 if th < 0 else math.pi)
+            p = HEAD_C + Vector((x, n.y * HEAD_R * 1.05, n.z * HEAD_R * 1.05))
+            sp.points[k].co = (p.x, p.y, p.z, 1)
+        parts.append(link(bpy.data.objects.new(f'row{i}', cu)))
+    return finish_hair('cornrows', parts)
+
+def hair_mullet():
+    parts = [hair_cap(front=1.05, back=2.05, side=1.55, scale=1.06)]
+    for i, ph in enumerate((-0.4, 0.0, 0.4)):
+        parts.append(lock(f'f{i}', 0.4, ph, (math.sin(ph) * 0.4, -0.7, 0.2), 0.13, 0.06))
+    for i, x in enumerate((-0.1, -0.035, 0.035, 0.1)):
+        root = HEAD_C + Vector((x, HEAD_R * 0.8, -HEAD_R * 0.2))
+        parts.append(strand(f'b{i}', root, Vector((x, 0.3, -1)), 0.22, 0.06))
+    hairline(parts, n=6, length=0.1, seed=5)
+    return finish_hair('mullet', parts)
 
 # ---------------------------------------------------------------- armature
 BONES = {}
@@ -434,7 +587,10 @@ shorts = build_shorts()
 boots = [build_boot(1), build_boot(-1)]
 hands = [build_hand(1), build_hand(-1)]
 head, ears = build_head()
-hairs = {'spiky': hair_spiky()}
+hairs = {}
+for fn in (hair_spiky, hair_buzz, hair_crop, hair_fringe, hair_afro, hair_mohawk, hair_curls, hair_locs, hair_bun, hair_ponytail, hair_hightop, hair_cornrows, hair_mullet):
+    h = fn()
+    hairs[h.name[5:]] = h
 
 for o in (body, shirt, shorts):
     auto_weight(o, rig)
@@ -561,11 +717,32 @@ def export(path):
     ]
     for name, h in hairs.items():
         meshes.append(export_mesh(h, rig, 'hair:' + name, 'none'))
-    data = {'version': 1, 'bones': bones, 'meshes': meshes, 'headCenter': to_scn(HEAD_C), 'headRadius': HEAD_R}
-    with open(path, 'w') as f: json.dump(data, f, separators=(',', ':'))
+    # Binary layout: u32 headerLen | header JSON | pad to 4 | blob.
+    import struct
+    blob = bytearray()
+    def put(fmt, arr):
+        off = len(blob)
+        blob.extend(struct.pack('<%d%s' % (len(arr), fmt), *arr))
+        while len(blob) % 4: blob.append(0)
+        return off
+    meta = []
+    for m in meshes:
+        n = len(m['positions']) // 3
+        e = {'name': m['name'], 'slot': m['slot'], 'count': n,
+             'pos': put('f', m['positions']), 'nor': put('f', m['normals']), 'uv': put('f', m['uvs']),
+             'joints': put('H', m['joints']), 'weights': put('f', m['weights']), 'groups': []}
+        for g in m['groups']:
+            e['groups'].append({'material': g['material'], 'offset': put('H', g['indices']), 'count': len(g['indices'])})
+        meta.append(e)
+    header = json.dumps({'version': 2, 'bones': bones, 'meshes': meta, 'headCenter': to_scn(HEAD_C), 'headRadius': HEAD_R}, separators=(',', ':')).encode()
+    while (4 + len(header)) % 4: header += b' '
+    with open(path, 'wb') as f:
+        f.write(struct.pack('<I', len(header))); f.write(header); f.write(blob)
     print('exported', path, os.path.getsize(path), 'bytes', sum(len(m['positions']) // 3 for m in meshes), 'verts')
 
 if '--export' in ARGS:
     dest = os.path.join(ROOT, 'Panna', 'Resources', 'Characters')
     os.makedirs(dest, exist_ok=True)
-    export(os.path.join(dest, 'base.json'))
+    export(os.path.join(dest, 'base.bin'))
+    old = os.path.join(dest, 'base.json')
+    if os.path.exists(old): os.remove(old)

@@ -64,8 +64,9 @@ final class CharacterStage: NSObject, SCNSceneRendererDelegate, ObservableObject
             return
         }
         if looks.count > 1 {
-            camera.position = SCNVector3(0, 1.3, 4.2 + n * 1.3)
-            camera.look(at: SCNVector3(0, 0.95, 0))
+            let d = spacing < 1 ? 1.2 + n * spacing * 1.05 : 4.2 + n * 1.3
+            camera.position = SCNVector3(0, spacing < 1 ? 1.5 : 1.3, d)
+            camera.look(at: SCNVector3(0, spacing < 1 ? 1.35 : 0.95, 0))
         }
     }
 

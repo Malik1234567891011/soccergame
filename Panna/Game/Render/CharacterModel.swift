@@ -4,20 +4,17 @@ import simd
 /// Skinned character data exported from Blender (art/blender/character.py). Loaded once, shared by all instances.
 final class CharacterModel {
     struct BoneData: Decodable { let name: String; let parent: Int; let matrix: [Float] }
-    struct Group: Decodable { let material: String; let indices: [Int32] }
-    struct MeshData: Decodable {
+    struct GroupMeta: Decodable { let material: String; let offset: Int; let count: Int }
+    struct MeshMeta: Decodable {
         let name: String
         let slot: String
-        let positions: [Float]
-        let normals: [Float]
-        let uvs: [Float]
-        let joints: [Int]
-        let weights: [Float]
-        let groups: [Group]
+        let count: Int
+        let pos: Int, nor: Int, uv: Int, joints: Int, weights: Int
+        let groups: [GroupMeta]
     }
-    struct File: Decodable {
+    struct Header: Decodable {
         let bones: [BoneData]
-        let meshes: [MeshData]
+        let meshes: [MeshMeta]
         let headCenter: [Float]
         let headRadius: Float
     }
@@ -42,15 +39,15 @@ final class CharacterModel {
     let headRadius: Float
 
     static let shared: CharacterModel = {
-        guard let url = Bundle.main.url(forResource: "base", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let file = try? JSONDecoder().decode(File.self, from: data) else {
-            fatalError("character model missing")
-        }
-        return CharacterModel(file)
+        guard let url = Bundle.main.url(forResource: "base", withExtension: "bin"),
+              let data = try? Data(contentsOf: url) else { fatalError("character model missing") }
+        let hlen = Int(data.withUnsafeBytes { $0.load(as: UInt32.self) })
+        guard let header = try? JSONDecoder().decode(Header.self, from: data.subdata(in: 4..<(4 + hlen))) else { fatalError("bad model header") }
+        let blob = data.subdata(in: (4 + hlen)..<data.count)
+        return CharacterModel(header, blob: blob)
     }()
 
-    init(_ f: File) {
+    init(_ f: Header, blob: Data) {
         boneNames = f.bones.map { $0.name }
         boneParents = f.bones.map { $0.parent }
         restWorld = f.bones.map { b in
@@ -67,24 +64,27 @@ final class CharacterModel {
         headCenter = SIMD3(f.headCenter[0], f.headCenter[1], f.headCenter[2])
         headRadius = f.headRadius
         meshes = f.meshes.map { m in
-            let n = m.positions.count / 3
-            let pos = Data(bytes: m.positions, count: m.positions.count * 4)
-            let nor = Data(bytes: m.normals, count: m.normals.count * 4)
-            let uvd = Data(bytes: m.uvs, count: m.uvs.count * 4)
+            let n = m.count
+            func slice(_ off: Int, _ bytes: Int) -> Data { blob.subdata(in: off..<(off + bytes)) }
             let sources = [
-                SCNGeometrySource(data: pos, semantic: .vertex, vectorCount: n, usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12),
-                SCNGeometrySource(data: nor, semantic: .normal, vectorCount: n, usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12),
-                SCNGeometrySource(data: uvd, semantic: .texcoord, vectorCount: n, usesFloatComponents: true, componentsPerVector: 2, bytesPerComponent: 4, dataOffset: 0, dataStride: 8),
+                SCNGeometrySource(data: slice(m.pos, n * 12), semantic: .vertex, vectorCount: n, usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12),
+                SCNGeometrySource(data: slice(m.nor, n * 12), semantic: .normal, vectorCount: n, usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12),
+                SCNGeometrySource(data: slice(m.uv, n * 8), semantic: .texcoord, vectorCount: n, usesFloatComponents: true, componentsPerVector: 2, bytesPerComponent: 4, dataOffset: 0, dataStride: 8),
             ]
-            let jointsU16 = m.joints.map { UInt16($0) }
-            let bi = SCNGeometrySource(data: Data(bytes: jointsU16, count: jointsU16.count * 2), semantic: .boneIndices, vectorCount: n,
+            let bi = SCNGeometrySource(data: slice(m.joints, n * 8), semantic: .boneIndices, vectorCount: n,
                                        usesFloatComponents: false, componentsPerVector: 4, bytesPerComponent: 2, dataOffset: 0, dataStride: 8)
-            let bw = SCNGeometrySource(data: Data(bytes: m.weights, count: m.weights.count * 4), semantic: .boneWeights, vectorCount: n,
+            let bw = SCNGeometrySource(data: slice(m.weights, n * 16), semantic: .boneWeights, vectorCount: n,
                                        usesFloatComponents: true, componentsPerVector: 4, bytesPerComponent: 4, dataOffset: 0, dataStride: 16)
-            let elements = m.groups.map { SCNGeometryElement(indices: $0.indices, primitiveType: .triangles) }
-            let all = m.groups.flatMap { $0.indices }
+            var all = Data()
+            let elements: [SCNGeometryElement] = m.groups.map { g in
+                let d = slice(g.offset, g.count * 2)
+                all.append(d)
+                return SCNGeometryElement(data: d, primitiveType: .triangles, primitiveCount: g.count / 3, bytesPerIndex: 2)
+            }
+            let total = m.groups.reduce(0) { $0 + $1.count }
             return Mesh(name: m.name, slot: m.slot, sources: sources, elements: elements, materialNames: m.groups.map { $0.material },
-                        outlineElement: SCNGeometryElement(indices: all, primitiveType: .triangles), boneWeights: bw, boneIndices: bi)
+                        outlineElement: SCNGeometryElement(data: all, primitiveType: .triangles, primitiveCount: total / 3, bytesPerIndex: 2),
+                        boneWeights: bw, boneIndices: bi)
         }
     }
 

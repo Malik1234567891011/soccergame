@@ -80,7 +80,21 @@ struct MatchHUD: View {
             .padding(.top, 70)
             .animation(.spring(response: 0.3, dampingFraction: 0.55), value: banners)
             .allowsHitTesting(false)
-            if hud.phase == .kickoff && hud.kickoffCountdown > 0 {
+            if hud.intro > 0 {
+                VStack(spacing: 4) {
+                    Text(hud.venue.uppercased())
+                        .font(.system(size: 44, weight: .black, design: .rounded)).italic()
+                        .foregroundStyle(.white)
+                        .shadow(color: Color(hex: 0xFF3B5C), radius: 0, x: 4, y: 4)
+                    Text(hud.venueCity.uppercased() + "  ·  " + hud.teamNames[0].uppercased() + " vs " + hud.teamNames[1].uppercased())
+                        .font(.system(size: 14, weight: .heavy, design: .rounded)).tracking(3)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 14).padding(.vertical, 5)
+                        .background(.black.opacity(0.5), in: Capsule())
+                }
+                .opacity(Double(min(1, hud.intro * 2)))
+                .allowsHitTesting(false)
+            } else if hud.phase == .kickoff && hud.kickoffCountdown > 0 {
                 Text(hud.kickoffCountdown > 0.45 ? "READY" : "GO!")
                     .font(.system(size: 54, weight: .black, design: .rounded))
                     .italic()

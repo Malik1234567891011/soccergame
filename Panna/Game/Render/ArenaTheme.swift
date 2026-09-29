@@ -34,7 +34,7 @@ struct ArenaTheme: Identifiable, Hashable {
 
     static let cage = ArenaTheme(id: "cage", name: "THE CAGE", city: "London", tagline: "Where every legend starts.",
         skyTop: 0x05070F, skyBottom: 0x1B2340, horizonGlow: 0xFF8A3B, fog: 0x10152A, ambient: 0x3A4A78, key: 0xFFE2B8, keyIntensity: 1500,
-        flood: 0xFFD7A0, floor: .turf, pitchA: 0x1F7A3A, pitchB: 0x238A42, lines: 0xF4F4F0, surround: 0x2A2C33, wall: 0x191B22,
+        flood: 0xFFD7A0, floor: .turf, pitchA: 0x155A2C, pitchB: 0x196633, lines: 0xF4F4F0, surround: 0x2A2C33, wall: 0x191B22,
         neonA: 0xFF3B5C, neonB: 0x39FF88, skyline: 0x0B0E1A, windows: 0xFFC46B, hasRoof: false, props: .city, night: true)
 
     static let rio = ArenaTheme(id: "rio", name: "RIO ROOFTOP", city: "Rio de Janeiro", tagline: "Joga bonito above the city.",

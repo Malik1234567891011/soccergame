@@ -90,13 +90,29 @@ struct ShowcaseView: View {
         StageView(stage: stage)
             .ignoresSafeArea()
             .onAppear {
+                let env = ProcessInfo.processInfo.environment
                 var a = Appearance()
                 a.hairStyle = .spikes; a.hairColor = 6; a.skinTone = 1; a.eyeColor = 3
                 a.primary = 0x7CFF3B; a.secondary = 0xE0266E; a.shirtPattern = .plain; a.number = 10; a.bootColor = 0x16181F
                 a.socks = 0x16181F
                 var b = Appearance.random(seed: 21, kit: (0x3B8CFF, 0x111318)); b.shirtPattern = .hoops; b.eyeColor = 1
                 var c = Appearance.random(seed: 33, kit: (0xFFD23B, 0x111318)); c.shirtPattern = .stripes; c.skinTone = 6
-                let env = ProcessInfo.processInfo.environment
+                if env["PANNA_SHOWCASE"] == "hair" {
+                    let styles = HairStyle.allCases.filter { $0 != .bald }
+                    stage.setCharacters(styles.prefix(7).enumerated().map { i, h in
+                        var x = Appearance.random(seed: UInt64(40 + i)); x.hairStyle = h; x.headwear = .none; x.hairColor = [0, 6, 3, 7, 1, 8, 4][i]
+                        return (x, h.rawValue)
+                    }, spacing: 0.9)
+                    return
+                }
+                if env["PANNA_SHOWCASE"] == "hair2" {
+                    let styles = HairStyle.allCases.filter { $0 != .bald }
+                    stage.setCharacters(styles.dropFirst(7).enumerated().map { i, h in
+                        var x = Appearance.random(seed: UInt64(60 + i)); x.hairStyle = h; x.headwear = .none; x.hairColor = [2, 5, 9, 0, 6, 3][i % 6]
+                        return (x, h.rawValue)
+                    }, spacing: 0.9)
+                    return
+                }
                 if env["PANNA_SHOWCASE"] == "1" { stage.setCharacters([(a, "Malik")]) }
                 else { stage.setCharacters([(b, "Rex"), (a, "Malik"), (c, "Sora")]) }
                 switch env["PANNA_ANIM"] {

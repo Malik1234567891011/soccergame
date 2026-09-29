@@ -115,6 +115,7 @@ final class CharacterRig {
         headMaterial = Toon.material(a.skinColor, texture: FaceTexture.image(a, .neutral), spec: 0.0)
         headMaterial.diffuse.wrapS = .repeat
         let outline = Toon.outlineMaterial()
+        let hairOutline = Toon.outlineMaterial(width: 0.006)
         let byName: [String: SCNMaterial] = [
             "skin": skin, "skin_arm": armMat, "shirt": shirt, "trim": trim, "shorts": shorts, "socks": socks,
             "sockband": band, "boot": boot, "sole": sole, "bootaccent": accent, "hair": hair, "head": headMaterial,
@@ -128,7 +129,7 @@ final class CharacterRig {
             if m.slot.hasPrefix("hair:") && (m.slot != "hair:" + hairStyle || hideHair) { continue }
             var mats = m.materialNames.map { byName[$0] ?? skin }
             if m.slot == "hands" { mats = mats.map { _ in gloves } }
-            mats.append(outline)
+            mats.append(m.slot.hasPrefix("hair:") ? hairOutline : outline)
             let g = SCNGeometry(sources: m.sources, elements: m.elements + [m.outlineElement])
             g.materials = mats
             let node = SCNNode(geometry: g)

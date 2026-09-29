@@ -172,11 +172,11 @@ final class MatchRenderer {
 
     private func buildCamera() {
         camera.wantsHDR = true
-        camera.fieldOfView = 30
+        camera.fieldOfView = 28
         camera.zNear = 0.5
         camera.zFar = 400
-        camera.bloomIntensity = 1.1
-        camera.bloomThreshold = 0.85
+        camera.bloomIntensity = 0.9
+        camera.bloomThreshold = 1.0
         camera.bloomBlurRadius = 10
         camera.wantsExposureAdaptation = false
         camera.exposureOffset = theme.night ? 0.1 : -0.1
@@ -300,15 +300,15 @@ final class MatchRenderer {
         }
         let bv = s.ball.vel
         focus += SIMD3<Float>(bv.x, 0, bv.z) * 0.12
-        var height: Float = 18.5
-        var back: Float = 23.0
-        var lookZOffset: Float = 1.6
+        var height: Float = 14.5
+        var back: Float = 24.5
+        var lookZOffset: Float = -1.6
         // Push in when the ball is near a goal.
         let nearGoal = max(0, abs(ball.x) - (L - 12)) / 12
         height -= nearGoal * 1.6
         back -= nearGoal * 1.4
-        focus.x = max(-L + 11, min(L - 11, focus.x))
-        focus.z = max(-2.5, min(2.5, focus.z * 0.3))
+        focus.x = max(-L + 8, min(L - 8, focus.x))
+        focus.z = max(-3, min(3.5, focus.z * 0.35))
 
         // Celebration cam: swoop onto the scorer.
         if s.phase == .goal || s.phase == .ended, s.lastScorer >= 0 {
@@ -327,8 +327,21 @@ final class MatchRenderer {
             lookAt = lookAt + (cl - lookAt) * e
             lookZOffset = 0
         }
-        // Critically damped spring.
-        let k: Float = 1 - exp(-dt * 6)
+        // Opening flyover: low over the pitch facing the skyline, then swing up into the broadcast view.
+        var k: Float = 1 - exp(-dt * 6)
+        if s.phase == .kickoff && s.time == 0 && s.score == [0, 0] {
+            let t = min(1, s.phaseT / 2.6)
+            let e = t * t * (3 - 2 * t)
+            let startPos = SIMD3<Float>(-14 + 10 * e, 2.2, 9)
+            let startLook = SIMD3<Float>(4, 3.2, -30)
+            targetPos = startPos + (targetPos - startPos) * e * e
+            lookAt = startLook + (lookAt - startLook) * e * e
+            if s.phaseT < 0.05 {
+                cameraNode.position = SCNVector3(startPos.x, startPos.y, startPos.z)
+                camTarget = startLook
+            }
+            k = 1 - exp(-dt * 10)
+        }
         camTarget += (lookAt - camTarget) * k
         var pos = SIMD3<Float>(cameraNode.position.x, cameraNode.position.y, cameraNode.position.z)
         pos += (targetPos - pos) * k
@@ -339,12 +352,12 @@ final class MatchRenderer {
         cameraNode.position = SCNVector3(pos.x, pos.y, pos.z)
         cameraNode.look(at: SCNVector3(camTarget.x + ox, camTarget.y + oy, camTarget.z))
         fovPunch = max(0, fovPunch - dt * 12)
-        camera.fieldOfView = CGFloat(30 + fovPunch - celebrationCam * 4)
+        camera.fieldOfView = CGFloat(28 + fovPunch - celebrationCam * 3)
         // Colour grade for flow / slow-mo.
         let humanFlow = human?.inFlow ?? false
         flowGrade += ((humanFlow ? 1 : 0) - flowGrade) * min(1, dt * 4)
         camera.saturation = CGFloat(1.12 + flowGrade * 0.35)
-        camera.bloomIntensity = CGFloat(1.1 + flowGrade * 0.8 + slowmoGrade * 0.6)
+        camera.bloomIntensity = CGFloat(0.9 + flowGrade * 0.8 + slowmoGrade * 0.6)
         camera.colorFringeStrength = CGFloat(0.4 + flowGrade * 1.2 + slowmoGrade * 1.5)
         camera.vignettingIntensity = CGFloat(0.55 + flowGrade * 0.35 + slowmoGrade * 0.3)
         camera.wantsDepthOfField = celebrationCam > 0.3

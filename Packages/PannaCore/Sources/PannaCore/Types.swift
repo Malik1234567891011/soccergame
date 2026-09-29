@@ -103,6 +103,7 @@ public struct MatchRules: Codable, Hashable, Sendable {
     public var goldenGoal: Bool = true
     public var normalizeStats: Bool = false // ranked: everyone gets neutral stats, builds are sidegrades
     public var arena: ArenaShape = .standard
+    public var introTime: Float = 3.2       // length of the first kickoff (camera flyover / walk-out)
     public init() {}
 }
 

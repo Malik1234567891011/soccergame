@@ -98,7 +98,8 @@ public final class MatchSim {
 
         switch state.phase {
         case .kickoff:
-            if state.phaseT >= 1.1 { state.phase = .playing; state.phaseT = 0 }
+            let wait: Float = state.time == 0 && state.score == [0, 0] ? rules.introTime : 1.1
+            if state.phaseT >= wait { state.phase = .playing; state.phaseT = 0 }
             animateIdle(dt)
             return
         case .goal:

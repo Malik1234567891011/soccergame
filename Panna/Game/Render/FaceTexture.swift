@@ -74,7 +74,12 @@ enum FaceTexture {
             c.addPath(p.cgPath); c.fillPath()
         case .goatee:
             c.setFillColor(fh.cgColor)
-            c.fillEllipse(in: CGRect(x: cx - 22, y: eyeY + 128, width: 44, height: 40))
+            let g = UIBezierPath()
+            g.move(to: CGPoint(x: cx - 24, y: eyeY + 124))
+            g.addLine(to: CGPoint(x: cx + 24, y: eyeY + 124))
+            g.addQuadCurve(to: CGPoint(x: cx, y: eyeY + 172), controlPoint: CGPoint(x: cx + 22, y: eyeY + 160))
+            g.addQuadCurve(to: CGPoint(x: cx - 24, y: eyeY + 124), controlPoint: CGPoint(x: cx - 22, y: eyeY + 160))
+            c.addPath(g.cgPath); c.fillPath()
         case .mustache:
             c.setFillColor(fh.cgColor)
             c.fillEllipse(in: CGRect(x: cx - 34, y: eyeY + 86, width: 68, height: 14))
