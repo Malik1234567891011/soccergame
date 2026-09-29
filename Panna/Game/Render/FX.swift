@@ -6,6 +6,14 @@ enum FX {
         let g = CGGradient(colorsSpace: cs, colors: [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 1])!
         c.drawRadialGradient(g, startCenter: CGPoint(x: 32, y: 32), startRadius: 0, endCenter: CGPoint(x: 32, y: 32), endRadius: 32, options: [])
     }
+    /// Thin bright ring with a soft inner falloff (shockwaves).
+    static let ring: UIImage = Tex.render(CGSize(width: 256, height: 256), key: "ring") { c, s in
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let g = CGGradient(colorsSpace: cs, colors: [UIColor.white.withAlphaComponent(0).cgColor, UIColor.white.withAlphaComponent(0.15).cgColor,
+                                                     UIColor.white.cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray,
+                           locations: [0, 0.78, 0.93, 1])!
+        c.drawRadialGradient(g, startCenter: CGPoint(x: 128, y: 128), startRadius: 0, endCenter: CGPoint(x: 128, y: 128), endRadius: 128, options: [])
+    }
     static let square: UIImage = Tex.render(CGSize(width: 16, height: 16), key: "sq") { c, s in
         c.setFillColor(UIColor.white.cgColor); c.fill(CGRect(origin: .zero, size: s))
     }

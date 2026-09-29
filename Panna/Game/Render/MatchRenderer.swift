@@ -374,8 +374,9 @@ final class MatchRenderer {
         var lookAt = SIMD3<Float>(focus.x, 0, focus.z + lookZOffset)
         if celebrationCam > 0, s.lastScorer >= 0 {
             let sp = s.players[s.lastScorer].pos
-            let cp = SIMD3<Float>(sp.x, 4.2, sp.y + 13.5)
-            let cl = SIMD3<Float>(sp.x, 0.9, sp.y)
+            // Hero framing: close enough that the scorer fills half the frame, high enough to clear the boards.
+            let cp = SIMD3<Float>(sp.x, 2.9, sp.y + 7.6)
+            let cl = SIMD3<Float>(sp.x, 1.05, sp.y)
             let e = celebrationCam * celebrationCam * (3 - 2 * celebrationCam)
             targetPos = targetPos + (cp - targetPos) * e
             lookAt = lookAt + (cl - lookAt) * e
@@ -415,7 +416,7 @@ final class MatchRenderer {
         camera.colorFringeStrength = CGFloat(0.4 + flowGrade * 1.2 + slowmoGrade * 1.5)
         camera.vignettingIntensity = CGFloat(0.55 + flowGrade * 0.35 + slowmoGrade * 0.3)
         camera.wantsDepthOfField = celebrationCam > 0.3
-        camera.focusDistance = 14
+        camera.focusDistance = CGFloat(14 - celebrationCam * 6)
         camera.fStop = 2.8
     }
 
@@ -474,7 +475,15 @@ final class MatchRenderer {
             arena.crowdCheer(intensity: 0.4)
         case .flowStart(let i):
             let p = s.players[i].pos
-            spawn(FX.burst(color: UIColor(hex: rigs[i].appearance.trail), count: 900, speed: 8, life: 0.7, size: 0.25), at: SCNVector3(p.x, 1, p.y))
+            // Crisp awakening: a sharp shockwave along the turf and speed-line sparks rising off the player.
+            let fc = UIColor(hex: rigs[i].appearance.trail)
+            shockRing(color: fc, at: SCNVector3(p.x, 0.04, p.y))
+            let rise = FX.burst(color: fc, count: 140, speed: 9, life: 0.45, size: 0.09, image: FX.spark, spread: 18)
+            rise.emittingDirection = SCNVector3(0, 1, 0)
+            rise.particleSizeVariation = 0.03
+            rise.orientationMode = .free
+            rise.stretchFactor = 0.08
+            spawn(rise, at: SCNVector3(p.x, 0.2, p.y))
             trauma = min(1, trauma + 0.4)
         case .wallHit(let sp, let x, let z):
             spawn(FX.burst(color: UIColor(hex: theme.neonA), count: CGFloat(min(200, sp * 12)), speed: 3, life: 0.3, size: 0.1, image: FX.spark), at: SCNVector3(x, 0.5, z))
@@ -485,6 +494,25 @@ final class MatchRenderer {
             trauma = min(1, trauma + 0.45)
         default: break
         }
+    }
+
+    private func shockRing(color: UIColor, at p: SCNVector3) {
+        let plane = SCNPlane(width: 1, height: 1)
+        let m = SCNMaterial()
+        m.diffuse.contents = FX.ring
+        m.multiply.contents = color
+        m.lightingModel = .constant
+        m.blendMode = .add
+        m.writesToDepthBuffer = false
+        m.isDoubleSided = true
+        plane.materials = [m]
+        let n = SCNNode(geometry: plane)
+        n.eulerAngles.x = -.pi / 2
+        n.position = p
+        n.scale = SCNVector3(0.4, 0.4, 0.4)
+        scene.rootNode.addChildNode(n)
+        let grow = SCNAction.scale(to: 7, duration: 0.5); grow.timingMode = .easeOut
+        n.runAction(.sequence([.group([grow, .fadeOut(duration: 0.5)]), .removeFromParentNode()]))
     }
 
     private func spawn(_ ps: SCNParticleSystem, at p: SCNVector3) {
