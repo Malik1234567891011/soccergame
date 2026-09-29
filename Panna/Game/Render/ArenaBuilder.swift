@@ -31,8 +31,62 @@ final class ArenaBuilder {
         }
         skyline()
         if theme.hasRoof { roof() }
+        ambience()
         // Only players, ball and goals cast shadows; thin props make streaky artifacts.
         root.enumerateHierarchy { n, _ in n.castsShadow = false }
+    }
+
+    // MARK: Ambience
+
+    private func ambience() {
+        let p = SCNParticleSystem()
+        p.loops = true
+        p.emitterShape = SCNBox(width: CGFloat(shape.halfLength * 2 + 16), height: 0.1, length: CGFloat(shape.halfWidth * 2 + 12), chamferRadius: 0)
+        p.birthLocation = .volume
+        p.particleImage = FX.softDot
+        p.blendMode = .additive
+        p.isLightingEnabled = false
+        var height: Float = 12
+        switch theme.id {
+        case "cage", "paris":
+            // Rain: fast thin streaks.
+            p.particleImage = FX.spark
+            p.birthRate = 900
+            p.particleLifeSpan = 1.1
+            p.particleVelocity = 16
+            p.particleVelocityVariation = 3
+            p.emittingDirection = SCNVector3(0.08, -1, 0.05)
+            p.spreadingAngle = 3
+            p.particleSize = 0.035
+            p.stretchFactor = 0.08
+            p.particleColor = UIColor(white: 0.85, alpha: theme.id == "paris" ? 0.0 : 0.35)
+            if theme.id == "paris" { return }   // underground: no rain
+        case "tokyo":
+            p.birthRate = 60; p.particleLifeSpan = 7; p.particleVelocity = 0.4; p.particleVelocityVariation = 0.3
+            p.emittingDirection = SCNVector3(0, -1, 0); p.spreadingAngle = 60
+            p.particleSize = 0.09; p.particleColor = UIColor(hex: theme.neonA, alpha: 0.5); height = 6
+        case "lagos", "marrakech":
+            p.birthRate = 45; p.particleLifeSpan = 8; p.particleVelocity = 0.25; p.particleVelocityVariation = 0.2
+            p.emittingDirection = SCNVector3(1, 0.1, 0); p.spreadingAngle = 40
+            p.particleSize = 0.05; p.particleColor = UIColor(red: 1, green: 0.85, blue: 0.6, alpha: 0.45); height = 3
+        case "rio":
+            p.birthRate = 30; p.particleLifeSpan = 6; p.particleVelocity = 0.3; p.particleVelocityVariation = 0.3
+            p.emittingDirection = SCNVector3(0, 1, 0); p.spreadingAngle = 180
+            p.particleSize = 0.07; p.particleColor = UIColor(red: 0.8, green: 1, blue: 0.4, alpha: 0.7); height = 2.5
+        case "miami":
+            p.birthRate = 35; p.particleLifeSpan = 6; p.particleVelocity = 0.5
+            p.emittingDirection = SCNVector3(-1, 0.2, 0); p.spreadingAngle = 30
+            p.particleSize = 0.06; p.particleColor = UIColor(white: 1, alpha: 0.35); height = 4
+        default:
+            // Arena: floating confetti glints.
+            p.birthRate = 25; p.particleLifeSpan = 8; p.particleVelocity = 0.2
+            p.emittingDirection = SCNVector3(0, -1, 0); p.spreadingAngle = 30
+            p.particleSize = 0.06; p.particleColor = UIColor(hex: theme.neonA, alpha: 0.6); height = 9
+        }
+        let n = SCNNode()
+        n.position = SCNVector3(0, height, 0)
+        n.addParticleSystem(p)
+        root.addChildNode(n)
     }
 
     // MARK: Sky & light
@@ -156,7 +210,7 @@ final class ArenaBuilder {
     private func ground() {
         let t = theme
         let floor = SCNFloor()
-        floor.reflectivity = t.floor == .court || t.props == .neonCity ? 0.12 : 0.03
+        floor.reflectivity = t.floor == .court || t.props == .neonCity ? 0.12 : (t.id == "cage" ? 0.08 : 0.03)
         floor.reflectionFalloffEnd = 6
         let m = Mat.textured(Tex.noise(256, seed: 3, base: UIColor(hex: t.surround), variance: 0.08), rough: 0.85, rim: 0)
         m.diffuse.contentsTransform = SCNMatrix4MakeScale(40, 40, 1)

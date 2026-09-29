@@ -172,6 +172,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         super.init()
         hud.teamNames = driver.state.teamNames
         hud.flowName = flowName
+        hud.colors = [renderer.teamColors[0].hexValue, renderer.teamColors[1].hexValue]
         if ProcessInfo.processInfo.environment["PANNA_CUTIN"] != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
                 guard let self else { return }

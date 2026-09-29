@@ -16,6 +16,7 @@ struct SceneViewHost: UIViewRepresentable {
         v.antialiasingMode = .multisampling4X
         v.backgroundColor = .black
         v.isUserInteractionEnabled = false
+        v.showsStatistics = ProcessInfo.processInfo.environment["PANNA_STATS"] != nil
         return v
     }
 
@@ -26,6 +27,7 @@ struct MatchScreen: View {
     @ObservedObject var controller: MatchController
     var onQuit: () -> Void
     @State private var showMenu = false
+    @State private var showVS = true
 
     var body: some View {
         ZStack {
@@ -38,12 +40,102 @@ struct MatchScreen: View {
             if controller.hud.phase != .ended && !showMenu && controller.humanId >= 0 {
                 MatchControls(input: controller.input, hud: controller.hud)
             }
+            if showVS {
+                VersusCard(controller: controller)
+                    .transition(.asymmetric(insertion: .identity, removal: .move(edge: .top).combined(with: .opacity)))
+                    .zIndex(10)
+            }
             if showMenu {
                 PauseOverlay(online: !controller.driver.allowsTimeWarp, onResume: { controller.paused = false; showMenu = false }, onQuit: onQuit)
             }
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
+        .onAppear {
+            // Covers shader warm-up and sells the matchup.
+            let wait = controller.driver.allowsTimeWarp ? 2.3 : 1.6
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { withAnimation(.easeIn(duration: 0.35)) { showVS = false } }
+        }
+    }
+}
+
+struct VersusCard: View {
+    let controller: MatchController
+    @State private var inAnim = false
+
+    var body: some View {
+        let names = controller.hud.teamNames
+        let colors = controller.hud.colors
+        GeometryReader { g in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                // Left: home.
+                SkewedHalf(left: true).fill(LinearGradient(colors: [Color(hex: colors[0]), Color(hex: colors[0]).opacity(0.4)], startPoint: .leading, endPoint: .trailing))
+                    .offset(x: inAnim ? 0 : -g.size.width)
+                SkewedHalf(left: false).fill(LinearGradient(colors: [Color(hex: colors[1]).opacity(0.4), Color(hex: colors[1])], startPoint: .leading, endPoint: .trailing))
+                    .offset(x: inAnim ? 0 : g.size.width)
+                HStack {
+                    side(team: 0, name: names[0], align: .leading).offset(x: inAnim ? 0 : -300)
+                    Spacer()
+                    side(team: 1, name: names[1], align: .trailing).offset(x: inAnim ? 0 : 300)
+                }
+                .padding(.horizontal, 60)
+                Text("VS").font(.display(96)).foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.8), radius: 0, x: 6, y: 6)
+                    .scaleEffect(inAnim ? 1 : 3).opacity(inAnim ? 1 : 0)
+                VStack {
+                    Spacer()
+                    Text(controller.renderer.theme.name + " · " + controller.renderer.theme.city.uppercased())
+                        .font(.label(14, .black)).tracking(4).foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 6).background(Capsule().fill(.black.opacity(0.6)))
+                        .padding(.bottom, 24)
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .onAppear { withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) { inAnim = true } }
+    }
+
+    func side(team: Int, name: String, align: HorizontalAlignment) -> some View {
+        VStack(alignment: align, spacing: 8) {
+            HStack(spacing: -18) {
+                ForEach(0..<3, id: \.self) { i in
+                    let slot = team * 4 + i
+                    Group {
+                        if let p = controller.portraits[slot], let img = Art.image(p) {
+                            Image(uiImage: img).resizable().scaledToFill()
+                        } else {
+                            Color.black.opacity(0.4).overlay(Image(systemName: "person.fill").foregroundStyle(.white.opacity(0.5)))
+                        }
+                    }
+                    .frame(width: 84, height: 104).clipShape(Skew(amount: 14))
+                    .overlay(Skew(amount: 14).stroke(.white, lineWidth: 2.5))
+                    .zIndex(Double(3 - i))
+                }
+            }
+            Text(name.uppercased()).font(.display(26)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
+                .shadow(color: .black.opacity(0.7), radius: 0, x: 3, y: 3)
+            Text((0..<3).map { controller.playerNames[team * 4 + $0] }.joined(separator: " · ").uppercased())
+                .font(.label(11, .black)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+        }
+        .frame(width: 320, alignment: align == .leading ? .leading : .trailing)
+    }
+}
+
+struct SkewedHalf: Shape {
+    var left: Bool
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        let mid = r.midX, k: CGFloat = 70
+        if left {
+            p.move(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: mid + k, y: r.minY))
+            p.addLine(to: CGPoint(x: mid - k, y: r.maxY)); p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+        } else {
+            p.move(to: CGPoint(x: mid + k + 6, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+            p.addLine(to: CGPoint(x: r.maxX, y: r.maxY)); p.addLine(to: CGPoint(x: mid - k + 6, y: r.maxY))
+        }
+        p.closeSubpath()
+        return p
     }
 }
 

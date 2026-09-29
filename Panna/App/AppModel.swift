@@ -104,7 +104,7 @@ final class AppModel: ObservableObject {
             let skills: [SkillTech] = [.stepOver, .elastico, .croqueta, .dragBack, .roulette]
             let shots: [ShotTech] = [.driven, .finesse, .driven, .knuckle, .trivela]
             let names = ["Tyrell", "Mo", "Kofi", "Dani", "Leo", "Jay", "Ruben", "Theo", "Kai", "Nico", "Ibra", "Sami", "Bo", "Ade", "Yuki", "Rafa"]
-            let nm = names[Int((seed >> UInt64(8 + i * 5)) % UInt64(names.count))]
+            let nm = names[(Int((seed >> 8) % UInt64(names.count)) + i * 5) % names.count]
             let d = (skill - 0.5) * 0.1
             let stats = st.baseStats.adding(PlayerStats(pace: d, control: d, shooting: d, passing: d, defending: d, physical: 0))
             out.append(Participant(setup: PlayerSetup(name: nm, loadout: Loadout(playstyle: st, skill: skills[i % 5], shot: shots[(i + Int(seed % 5)) % 5], trait: .none),
