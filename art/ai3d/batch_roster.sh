@@ -1,7 +1,7 @@
 #!/bin/zsh
 cd ${0:A:h}
 until grep -q "BATCH DONE" /tmp/batch_prospects.log 2>/dev/null; do sleep 10; done
-for f in l*_ref_front.png; do
+for f in l[0-9]*_ref_front.png; do
   id=${f%_ref_front.png}
   if [ ! -f ../../Panna/Resources/Characters/$id.bin ]; then
     echo "=== $id $(date +%T)"

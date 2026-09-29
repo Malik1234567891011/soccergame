@@ -76,11 +76,11 @@ struct StreetPassView: View {
                             } label: {
                                 VStack(spacing: 3) {
                                     Text("\(t)").font(.label(9, .black)).foregroundStyle(.white.opacity(0.6))
-                                    Image(systemName: claimed ? "checkmark.circle.fill" : r.icon).font(.system(size: 20, weight: .bold))
+                                    Image(systemName: claimed ? "checkmark.circle.fill" : r.icon).font(.system(size: 16, weight: .bold))
                                         .foregroundStyle(claimed ? Theme.green : r.color)
                                     Text(r.label).font(.label(8, .black)).foregroundStyle(.white).lineLimit(2).multilineTextAlignment(.center)
                                 }
-                                .frame(width: 70, height: 84)
+                                .frame(width: 64, height: 66)
                                 .background(RoundedRectangle(cornerRadius: 10).fill(reached ? (claimed ? Theme.panel : r.color.opacity(0.25)) : Theme.panel.opacity(0.6)))
                                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(reached && !claimed ? r.color : .white.opacity(0.08), lineWidth: reached && !claimed ? 2 : 1))
                                 .opacity(reached ? 1 : 0.55)
@@ -93,7 +93,7 @@ struct StreetPassView: View {
                 .onAppear { proxy.scrollTo(max(1, tier), anchor: .center) }
             }
         }
-        .padding(12)
+        .padding(10)
         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel.opacity(0.9)))
     }
 }

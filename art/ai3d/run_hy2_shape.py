@@ -5,7 +5,10 @@ import os, sys, time, json, httpx
 from gradio_client import Client, handle_file
 img, out = sys.argv[1], sys.argv[2]
 tok = os.environ.get("HF_TOKEN")
-c = Client("tencent/Hunyuan3D-2", verbose=False, download_files=False, **({"hf_token": tok} if tok else {}))
+if not tok:
+    envp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env.local")
+    tok = next((l.split("=", 1)[1].strip() for l in open(envp) if l.startswith("HF_TOKEN=")), None)
+c = Client("tencent/Hunyuan3D-2", verbose=False, download_files=False, **({"token": tok} if tok else {}))
 t0 = time.time()
 r = c.predict(caption=None, image=handle_file(img), steps=30, guidance_scale=5.0, seed=1234, octree_resolution=256,
               check_box_rembg=True, num_chunks=8000, randomize_seed=False, api_name="/shape_generation")

@@ -273,19 +273,18 @@ struct ProfileView: View {
             AppBackground(accent: Theme.cyan)
             HStack(alignment: .top, spacing: 30) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(p.name.uppercased()).font(.display(36)).foregroundStyle(.white)
+                    Text(p.name.uppercased()).font(.display(28)).foregroundStyle(.white)
                     Text(Catalog.valueTitle(p.marketValue).uppercased() + " · PEAK " + formatValue(p.peakValue)).font(.label(12, .black)).foregroundStyle(Theme.gold)
                     HStack(spacing: 8) {
                         Image(systemName: "shield.lefthalf.filled").foregroundStyle(Color(hex: Catalog.tierColors[p.tierIndex]))
                         Text(p.rankName).font(.display(20)).foregroundStyle(.white)
                         Text("\(p.rankProgress)/100 RP").font(.label(11)).foregroundStyle(.white.opacity(0.6))
                     }
-                    Grid(alignment: .leading, horizontalSpacing: 22, verticalSpacing: 6) {
-                        GridRow { stat("MATCHES", p.stats.matches); stat("WINS", p.stats.wins); stat("WIN %", p.stats.matches > 0 ? p.stats.wins * 100 / p.stats.matches : 0) }
-                        GridRow { stat("GOALS", p.stats.goals); stat("ASSISTS", p.stats.assists); stat("PANNAS", p.stats.nutmegs) }
-                        GridRow { stat("FLOWS", p.stats.flows); stat("MVPs", p.stats.mvps); stat("BEST STREAK", p.bestStreak) }
+                    Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 4) {
+                        GridRow { stat("MATCHES", p.stats.matches); stat("WINS", p.stats.wins); stat("WIN %", p.stats.matches > 0 ? p.stats.wins * 100 / p.stats.matches : 0); stat("GOALS", p.stats.goals); stat("ASSISTS", p.stats.assists) }
+                        GridRow { stat("PANNAS", p.stats.nutmegs); stat("FLOWS", p.stats.flows); stat("MVPs", p.stats.mvps); stat("STREAK", p.bestStreak); stat("GAUNTLET", p.selectionBest) }
                     }
-                    .padding(.top, 6)
+                    .padding(.top, 2)
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     Text("SETTINGS").font(.display(20)).foregroundStyle(.white)
@@ -297,8 +296,9 @@ struct ProfileView: View {
                 .tint(Theme.green)
                 .frame(width: 240)
             }
-            .padding(.top, 40)
-            VStack { Spacer(); StreetPassView().frame(width: 760).padding(.bottom, 12) }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.top, 50)
+            VStack { Spacer(); StreetPassView().frame(width: 760).padding(.bottom, 8) }
             VStack {
                 TopBar(title: nil, onBack: { app.go(.home) })
                 Spacer()

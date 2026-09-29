@@ -39,7 +39,8 @@ struct AppBackground: View {
         ZStack {
             LinearGradient(colors: [Color(hex: 0x0B0E22), Theme.bg, Color(hex: 0x140818)], startPoint: .topLeading, endPoint: .bottomTrailing)
             if let key = Art.image("keyart") {
-                Image(uiImage: key).resizable().scaledToFill().opacity(0.13).blur(radius: 2).ignoresSafeArea()
+                // Overlay on a clear view so the fill image can never grow the layout (it pushed top bars off-screen).
+                Color.clear.overlay(Image(uiImage: key).resizable().scaledToFill().opacity(0.13).blur(radius: 2)).clipped()
             }
             // Diagonal speed streaks.
             TimelineView(.animation(minimumInterval: 1 / 30)) { tl in

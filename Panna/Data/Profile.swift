@@ -177,6 +177,7 @@ struct Profile: Codable {
     var selectionBest = 0
     var selectionRuns = 0
     var passXP = 0
+    var lookMigrated = false
     var passClaimed: Set<Int> = []
 
     // MARK: Derived
@@ -224,6 +225,10 @@ final class ProfileStore: ObservableObject {
         } else {
             p = Profile()
             p.appearance = ProfileStore.starterLook()
+        }
+        if p.appearance.look == nil && !p.lookMigrated, let first = Catalog.looks.first {
+            p.appearance.look = first
+            p.lookMigrated = true
         }
         refreshDaily()
     }

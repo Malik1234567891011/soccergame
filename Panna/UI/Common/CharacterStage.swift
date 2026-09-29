@@ -26,8 +26,8 @@ final class CharacterStage: NSObject, SCNSceneRendererDelegate, ObservableObject
         cam.wantsExposureAdaptation = false
         cam.vignettingIntensity = 0.4
         camera.camera = cam
-        camera.position = SCNVector3(0, 1.25, 5.6)
-        camera.look(at: SCNVector3(0, 0.95, 0))
+        camera.position = SCNVector3(0, 1.15, 6.4)
+        camera.look(at: SCNVector3(0, 0.88, 0))
         scene.rootNode.addChildNode(camera)
         // Floor disc with a glow ring.
         let disc = SCNCylinder(radius: 1.1, height: 0.04)

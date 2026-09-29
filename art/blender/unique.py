@@ -121,7 +121,17 @@ for k in side_keys:
     img, dims, mask = views[k]
     dirs[k] = facing(mask, int(dims[1]), dims[4], dims[5])
     print('FACING', k, 'image-right' if dirs[k] > 0 else 'image-left')
-if len(side_keys) == 2 and dirs['left'] == dirs['right']:
+if len(side_keys) == 1:
+    k0 = side_keys[0]
+    img0, (w, h, l, r, t, b), mask0 = views[k0]
+    twin = img0.copy()
+    px = np.array(img0.pixels[:], dtype=np.float32).reshape(int(h), int(w), 4)[:, ::-1, :].copy()
+    twin.pixels[:] = px.ravel(); twin.update()
+    other = 'right' if k0 == 'left' else 'left'
+    views[other] = (twin, (w, h, w - 1 - r, w - 1 - l, t, b), mask0[:, ::-1].copy())
+    dirs[other] = -dirs[k0]
+    print('MIRRORED single side view to cover both sides')
+elif len(side_keys) == 2 and dirs['left'] == dirs['right']:
     img, (w, h, l, r, t, b), mask = views['right']
     px = np.array(img.pixels[:], dtype=np.float32).reshape(int(h), int(w), 4)[:, ::-1, :].copy()
     img.pixels[:] = px.ravel(); img.update()

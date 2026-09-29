@@ -68,7 +68,7 @@ struct HomeView: View {
                     HStack(spacing: 10) {
                         ModeTile(title: "CAREER", detail: careerDetail, icon: "map.fill", color: Theme.pink) { app.go(.career) }
                         ModeTile(title: "ONLINE", detail: "PvP · Co-op", icon: "globe", color: Theme.cyan) { app.go(.online) }
-                        ModeTile(title: "SELECTION", detail: p.selection != nil ? "Round \(p.selection!.round)" : "Best \(p.selectionBest)", icon: "flame.fill", color: Theme.gold) {
+                        ModeTile(title: "GAUNTLET", detail: p.selection != nil ? "Round \(p.selection!.round)" : "Best \(p.selectionBest)", icon: "flame.fill", color: Theme.gold) {
                             app.go(.selection)
                         }
                     }
@@ -91,8 +91,8 @@ struct HomeView: View {
         .onAppear {
             stage.setCharacters([(p.appearance, p.name)])
             stage.yaw = 0.35
-            stage.camera.position = SCNVector3Make(0, 1.05, 6.0)
-            stage.camera.look(at: SCNVector3Make(0, 0.82, 0))
+            stage.camera.position = SCNVector3Make(0, 1.0, 6.8)
+            stage.camera.look(at: SCNVector3Make(0, 0.72, 0))
             AudioEngine.shared.setMusic(store.p.settings.music)
             store.refreshDaily()
         }
@@ -175,7 +175,7 @@ struct ModeTile: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 Image(systemName: icon).font(.system(size: 18, weight: .black)).foregroundStyle(color)
-                Text(title).font(.display(15)).foregroundStyle(.white)
+                Text(title).font(.display(15)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
                 Text(detail).font(.label(10)).foregroundStyle(.white.opacity(0.6)).lineLimit(1).minimumScaleFactor(0.7)
             }
             .padding(10)
