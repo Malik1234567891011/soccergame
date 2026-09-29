@@ -82,7 +82,7 @@ struct Quest: Codable, Identifiable, Hashable {
 // MARK: - Match report
 
 enum MatchMode: Codable, Hashable {
-    case quick, career(stage: String), ranked, coop, friendly, tutorial
+    case quick, career(stage: String), ranked, coop, friendly, tutorial, online(OnlineMode)
 }
 
 struct MatchReport {

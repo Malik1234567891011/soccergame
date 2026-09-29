@@ -101,6 +101,7 @@ public struct MatchRules: Codable, Hashable, Sendable {
     public var duration: Float = 150
     public var goalsToWin: Int = 5          // first to N ends the match early (mercy)
     public var goldenGoal: Bool = true
+    public var goldenGoalLimit: Float = 60   // golden goal can't last forever: draw after this
     public var normalizeStats: Bool = false // ranked: everyone gets neutral stats, builds are sidegrades
     public var arena: ArenaShape = .standard
     public var introTime: Float = 3.2       // length of the first kickoff (camera flyover / walk-out)

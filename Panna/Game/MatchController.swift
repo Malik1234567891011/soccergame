@@ -35,6 +35,8 @@ protocol MatchDriver: AnyObject {
     /// Advance by real time; returns new events.
     func advance(dt: Float, input: InputFrame, timeScale: Float) -> [MatchEvent]
     func stop()
+    /// Offline matches can pause, hit-stop and slow down; online ones follow the server clock.
+    var allowsTimeWarp: Bool { get }
 }
 
 final class OfflineDriver: MatchDriver {
@@ -69,6 +71,7 @@ final class OfflineDriver: MatchDriver {
     }
 
     func stop() {}
+    var allowsTimeWarp: Bool { true }
 }
 
 struct Banner: Identifiable, Equatable {
@@ -146,7 +149,8 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         var dt = Float(time - lastTime)
         lastTime = time
         dt = min(max(dt, 0), 0.05)
-        if paused { return }
+        if paused && driver.allowsTimeWarp { return }
+        if !driver.allowsTimeWarp { hitstop = 0; slowmo = 0; slowmoScale = 1 }
 
         var events: [MatchEvent] = []
         if hitstop > 0 {
@@ -211,7 +215,11 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         }
     }
 
+    private var lastBanner: (String, TimeInterval) = ("", 0)
     private func banner(_ b: Banner) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if lastBanner.0 == b.title && now - lastBanner.1 < 0.8 { return }
+        lastBanner = (b.title, now)
         DispatchQueue.main.async {
             self.banners.append(b)
             let id = b.id

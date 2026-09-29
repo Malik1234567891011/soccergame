@@ -25,8 +25,11 @@ final class AppModel: ObservableObject {
     /// Adaptive difficulty for Quick Match (keeps win rate ~55–60%).
     @AppStorage("quickSkill") var quickSkill: Double = 0.38
 
+    var lastOnlineEnd: MatchEndInfo?
+
     init(store: ProfileStore) {
         self.store = store
+        defer { wireOnline() }
         let env = ProcessInfo.processInfo.environment
         if env["PANNA_SHOWCASE"] != nil { screen = .showcase; return }
         if let s = env["PANNA_SCREEN"] {
@@ -162,6 +165,61 @@ final class AppModel: ObservableObject {
         go(.match)
     }
 
+    // MARK: - Online
+
+    func hello() -> Hello {
+        let p = store.p
+        return Hello(playerId: p.id, name: p.name, appearance: p.appearance.encoded(), celebration: p.celebration,
+                     loadout: p.loadout, stats: p.stats3, localRP: p.rp)
+    }
+
+    func wireOnline() {
+        online.onMatchStart = { [weak self] info in self?.startOnline(info) }
+        online.onMatchEnd = { [weak self] info in
+            guard let self else { return }
+            self.lastOnlineEnd = info
+            if info.ranked { self.store.p.rp = info.rpAfter; self.store.p.peakRP = max(self.store.p.peakRP, info.rpAfter); self.store.save() }
+            (self.match?.driver as? OnlineDriver)?.ended = true
+            if self.screen == .match { self.match?.finished = true }
+        }
+    }
+
+    func startOnline(_ info: MatchStartInfo) {
+        print("[online] matchStart you=\(info.you) theme=\(info.theme)")
+        func parts(_ t: TeamInfo) -> [Participant] {
+            t.slots.map { sl in
+                var look = Appearance.decode(sl.appearance) ?? {
+                    var a = Appearance.random(seed: ProfileStore.stableSeed(sl.name + t.name), kit: (t.color, 0xFFFFFF))
+                    a.shirtPattern = .plain
+                    return a
+                }()
+                if sl.appearance.isEmpty == false && sl.playerId != store.p.id {
+                    // Other humans keep their look but wear their team's colours so teams read clearly.
+                    look.primary = t.color; look.socks = t.color
+                }
+                if sl.playerId == store.p.id { look.primary = t.color; look.socks = t.color }
+                return Participant(setup: PlayerSetup(name: sl.name, loadout: sl.loadout, stats: sl.stats, isHuman: sl.isHuman),
+                                   appearance: look, celebration: sl.celebration)
+            }
+        }
+        var spec = MatchSpec(home: parts(info.home), away: parts(info.away), homeName: info.home.name, awayName: info.away.name,
+                             homeColor: info.home.color, awayColor: info.away.color, homeAISkill: info.home.aiSkill, awayAISkill: info.away.aiSkill,
+                             theme: ArenaTheme.byId(info.theme), humanId: info.you)
+        spec.rules = info.rules
+        let template = MatchSim(home: info.home, away: info.away, rules: info.rules, seed: 1).state
+        let driver = OnlineDriver(template: template, you: info.you)
+        driver.send = online.makeSender()
+        online.driver = driver
+        let m = MatchFactory.controller(driver: driver, spec: spec)
+        m.hapticsOn = store.p.settings.haptics
+        pending = PendingMatch(mode: .online(info.mode), theme: spec.theme, stage: nil, opponentName: info.away.name)
+        lastOnlineEnd = nil
+        match = m
+        AudioEngine.shared.setMusic(false)
+        AudioEngine.shared.setCrowd(true, base: 0.22)
+        go(.match)
+    }
+
     // MARK: - Finishing
 
     func finishMatch(forfeit: Bool = false) {
@@ -212,6 +270,7 @@ final class AppModel: ObservableObject {
         lastRewards = rewards
         AudioEngine.shared.setCrowd(false)
         AudioEngine.shared.setMusic(store.p.settings.music)
+        if case .online = pend.mode, forfeit { online.send(.leaveMatch) }
         if forfeit { match = nil; go(.home); return }
         go(.postMatch)
     }
@@ -224,6 +283,11 @@ final class AppModel: ObservableObject {
     func rematch() {
         guard let pend = pending else { return }
         match = nil
+        if case .online(let mode) = pend.mode {
+            go(.online)
+            if mode != .room { online.queue(mode) }
+            return
+        }
         play(pend.mode, theme: pend.theme, stage: pend.stage)
     }
 }

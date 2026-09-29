@@ -141,6 +141,9 @@ public final class MatchSim {
         if s[0] >= rules.goalsToWin || s[1] >= rules.goalsToWin || (state.goldenGoal && afterGoal) {
             endMatch(); return true
         }
+        if state.goldenGoal && state.time >= rules.duration + rules.goldenGoalLimit {
+            endMatch(); return true
+        }
         if state.time >= rules.duration && !state.goldenGoal {
             if s[0] == s[1] && rules.goldenGoal {
                 state.goldenGoal = true

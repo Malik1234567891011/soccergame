@@ -25,17 +25,18 @@ struct SceneViewHost: UIViewRepresentable {
 struct MatchScreen: View {
     @ObservedObject var controller: MatchController
     var onQuit: () -> Void
+    @State private var showMenu = false
 
     var body: some View {
         ZStack {
             SceneViewHost(controller: controller)
                 .ignoresSafeArea()
-            MatchHUD(hud: controller.hud, banners: controller.banners, onPause: { controller.paused = true })
-            if controller.hud.phase != .ended && !controller.paused && controller.humanId >= 0 {
+            MatchHUD(hud: controller.hud, banners: controller.banners, onPause: { controller.paused = true; showMenu = true })
+            if controller.hud.phase != .ended && !showMenu && controller.humanId >= 0 {
                 MatchControls(input: controller.input, hud: controller.hud)
             }
-            if controller.paused {
-                PauseOverlay(onResume: { controller.paused = false }, onQuit: onQuit)
+            if showMenu {
+                PauseOverlay(online: !controller.driver.allowsTimeWarp, onResume: { controller.paused = false; showMenu = false }, onQuit: onQuit)
             }
         }
         .statusBarHidden()
@@ -190,13 +191,15 @@ struct BannerView: View {
 }
 
 struct PauseOverlay: View {
+    var online = false
     var onResume: () -> Void
     var onQuit: () -> Void
     var body: some View {
         ZStack {
             Color.black.opacity(0.6).ignoresSafeArea()
             VStack(spacing: 16) {
-                Text("PAUSED").font(.system(size: 40, weight: .black, design: .rounded)).italic().foregroundStyle(.white)
+                Text(online ? "MATCH IS LIVE" : "PAUSED").font(.system(size: 40, weight: .black, design: .rounded)).italic().foregroundStyle(.white)
+                if online { Text("A bot takes your seat if you leave.").font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.7)) }
                 Button(action: onResume) {
                     Text("RESUME").font(.system(size: 18, weight: .black, design: .rounded))
                         .frame(width: 220, height: 50)
@@ -204,7 +207,7 @@ struct PauseOverlay: View {
                         .foregroundStyle(.black)
                 }
                 Button(action: onQuit) {
-                    Text("FORFEIT").font(.system(size: 15, weight: .heavy, design: .rounded))
+                    Text(online ? "LEAVE MATCH" : "FORFEIT").font(.system(size: 15, weight: .heavy, design: .rounded))
                         .frame(width: 220, height: 44)
                         .background(.white.opacity(0.12), in: Capsule())
                         .foregroundStyle(.white)
