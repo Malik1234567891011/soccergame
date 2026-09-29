@@ -105,6 +105,7 @@ struct HUDState: Equatable {
     var inFlow = false
     var flowRemaining: Float = 0
     var hasBall = false
+    var teamHasBall = false
     var charge: Float = -1
     var stamina: Float = 1
     var teamNames = ["HOME", "AWAY"]
@@ -266,6 +267,7 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
             h.inFlow = p.inFlow
             h.flowRemaining = p.flowT
             h.hasBall = s.ball.owner == humanId
+            h.teamHasBall = s.ball.owner >= 0 && s.players[s.ball.owner].team == s.players[humanId].team
             h.charge = p.shotCharge
             h.stamina = p.stamina
         }

@@ -882,6 +882,42 @@ if hg:
                     hg.add([v.index], moved, 'ADD')
     bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.view_layer.objects.active = obj
     bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
+# Shorts/shirt hem must never follow the hands: the generator fuses hanging hands to the shorts and auto-weights
+# bleed across. Arm bones may only move vertices within arm thickness of the arm chain.
+def _seg_d(p_, a_, b_):
+    ab = b_ - a_; t_ = max(0.0, min(1.0, (p_ - a_).dot(ab) / max(ab.length_squared, 1e-9)))
+    return (p_ - (a_ + ab * t_)).length
+chains = {}
+for side in ('L', 'R'):
+    segs = []
+    for bn in ('upperarm.', 'forearm.', 'hand.'):
+        bb = arm.bones.get(bn + side)
+        if bb: segs.append((bb.head_local.copy(), bb.tail_local.copy()))
+    chains[side] = segs
+arm_idx = {g.index: g.name for g in obj.vertex_groups if g.name.startswith(('forearm', 'hand', 'upperarm'))}
+hips_g = obj.vertex_groups.get('hips'); spine_g = obj.vertex_groups.get('spine')
+R_arm = 0.05 * H
+stripped = 0
+for v in obj.data.vertices:
+    zf = (v.co.z - mn.z) / H
+    if zf > 0.53 or os.environ.get('NO_DETACH'): continue          # only the shorts band
+    if zones[v.index]: continue    # separated arm geometry is always the arm's
+    _h, _s, _v = colorsys.rgb_to_hsv(*[min(1.0, max(0.0, float(x))) for x in vcol[v.index]])
+    if not (_s > 0.25 and abs(_h - 0.62) < 0.13): continue   # shorts are code-kit blue; hands are skin
+    aw = [(g.group, g.weight) for g in v.groups if g.group in arm_idx and g.weight > 0]
+    if not aw: continue
+    moved = 0.0
+    for gi, w in aw:
+        side = arm_idx[gi][-1]
+        d = min((_seg_d(v.co, a_, b_) for a_, b_ in chains.get(side, [])), default=0.0)
+        if d > R_arm:
+            f = min(1.0, (d - R_arm) / (0.4 * R_arm))
+            obj.vertex_groups[gi].add([v.index], w * (1 - f), 'REPLACE'); moved += w * f
+    if moved > 0:
+        (hips_g if zf < 0.58 else spine_g or hips_g).add([v.index], moved, 'ADD'); stripped += 1
+print('UNIQUE detached', stripped, 'body verts from the arm bones')
+bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
 unweighted = sum(1 for v in obj.data.vertices if sum(g.weight for g in v.groups) < 0.01)
 print('UNIQUE rig unweighted verts', unweighted, 'of', len(obj.data.vertices))
 # Anything left unweighted snaps to the nearest bone head.

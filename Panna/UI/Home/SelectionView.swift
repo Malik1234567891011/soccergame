@@ -4,6 +4,8 @@ import PannaCore
 struct SelectionView: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var store: ProfileStore
+    @State private var confirmAbandon = false
+    @State private var inspect: EgoPerk?
 
     var body: some View {
         ZStack {
@@ -19,7 +21,43 @@ struct SelectionView: View {
                 TopBar(title: "THE SELECTION", onBack: { app.go(.home) })
                 Spacer()
             }
+            if let p = inspect {
+                ZStack {
+                    Color(hex: 0x05060C).opacity(0.88).ignoresSafeArea().onTapGesture { inspect = nil }
+                    VStack(spacing: 14) {
+                        perkCard(p, compact: false)
+                        let copies = store.p.selection?.perks.filter { $0 == p.id }.count ?? 0
+                        if copies > 1 { Text("STACKED ×\(copies)").font(.label(12, .black)).foregroundStyle(Theme.gold) }
+                        Button("CLOSE") { inspect = nil }.font(.label(13, .black)).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                .transition(.opacity)
+            }
+            if confirmAbandon, let run = store.p.selection {
+                ZStack {
+                    Color(hex: 0x05060C).opacity(0.88).ignoresSafeArea().onTapGesture { confirmAbandon = false }
+                    VStack(spacing: 12) {
+                        Text("ABANDON THIS RUN?").font(.display(28)).foregroundStyle(.white)
+                        Text("Round \(run.round), \(run.perks.count) perks and \(run.lives) lives will be lost. This can't be undone.")
+                            .font(.label(13)).foregroundStyle(.white.opacity(0.75)).multilineTextAlignment(.center).frame(width: 360)
+                        GlowButton(title: "KEEP GOING", icon: "flame.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 50) { confirmAbandon = false }
+                            .frame(width: 260)
+                        Button {
+                            var r = run; r.over = true; store.p.selection = r
+                            app.finishSelectionRun(); store.save(); confirmAbandon = false
+                        } label: {
+                            Text("ABANDON RUN").font(.label(13, .black)).foregroundStyle(Theme.pink)
+                                .frame(width: 260, height: 40).background(Skew(amount: 8).fill(Theme.panel2))
+                        }
+                    }
+                    .padding(28)
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Theme.panel))
+                }
+                .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.18), value: confirmAbandon)
+        .animation(.easeOut(duration: 0.18), value: inspect?.id)
         .onAppear {
             AudioEngine.shared.setTrack("selection")
             // Test hook: PANNA_SELECTION_AUTO=1 starts a run and plays straight away.
@@ -72,16 +110,18 @@ struct SelectionView: View {
                     ForEach(0..<3) { i in Image(systemName: i < run.lives ? "heart.fill" : "heart").font(.system(size: 22)).foregroundStyle(Theme.pink) }
                 }
                 Text("Best: \(store.p.selectionBest)  ·  Goals this run: \(run.goals)").font(.label(11)).foregroundStyle(.white.opacity(0.6))
-                Text("EGO PERKS").font(.label(11, .black)).tracking(2).foregroundStyle(.white.opacity(0.6)).padding(.top, 6)
+                Text("EGO PERKS · tap to inspect").font(.label(11, .black)).tracking(2).foregroundStyle(.white.opacity(0.6)).padding(.top, 6)
                 if run.perks.isEmpty {
                     Text("Win to devour your first perk.").font(.label(11)).foregroundStyle(.white.opacity(0.5))
                 }
                 FlowLayout(spacing: 6) {
                     ForEach(Array(run.perks.enumerated()), id: \.offset) { _, id in
                         if let p = Selection.perk(id) {
-                            Label(p.name, systemImage: p.icon).font(.label(10, .black)).foregroundStyle(.white)
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                                .background(Capsule().fill(p.rarity.color.opacity(0.35)))
+                            Button { inspect = p } label: {
+                                Label(p.name, systemImage: p.icon).font(.label(10, .black)).foregroundStyle(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 5)
+                                    .background(Capsule().fill(p.rarity.color.opacity(0.35)))
+                            }
                         }
                     }
                 }
@@ -107,10 +147,7 @@ struct SelectionView: View {
                 .overlay(Skew(amount: 18).stroke(boss ? Theme.gold : Theme.cyan, lineWidth: 1.5))
                 GlowButton(title: "PLAY ROUND \(run.round)", icon: "play.fill", height: 56) { app.play(.selection) }
                     .frame(width: 330)
-                Button("Abandon run") {
-                    var r = run; r.over = true; store.p.selection = r
-                    app.finishSelectionRun(); store.save()
-                }
+                Button("Abandon run") { confirmAbandon = true }
                 .font(.label(11, .black)).foregroundStyle(.white.opacity(0.45))
             }
         }

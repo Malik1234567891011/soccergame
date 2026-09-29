@@ -80,7 +80,7 @@ enum MatchFactory {
             for i in 0..<3 {
                 let p = team[min(i, team.count - 1)]
                 if let m = p.model { portraits.append("prospect_" + m) }
-                else if let l = p.appearance.look { portraits.append("look_" + l) }
+                else if let l = p.appearance.look { portraits.append(Catalog.lookPortrait(l)) }
                 else { portraits.append(nil) }
             }
             portraits.append(nil)

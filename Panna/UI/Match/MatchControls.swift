@@ -70,7 +70,9 @@ struct MatchControls: View {
                              size: 96, color: hud.hasBall ? Color(hex: 0xFF3B5C) : Color(hex: 0x3B8CFF), input: input, button: .shoot,
                              charge: hud.hasBall ? hud.charge : -1)
                     .position(br)
-                ActionButton(label: hud.hasBall ? "PASS" : "CALL", icon: hud.hasBall ? "arrow.up.right" : "hand.raised.fill",
+                // Attacking: PASS / CALL for it. Defending: PRESS (a teammate jumps the carrier with you).
+                ActionButton(label: hud.hasBall ? "PASS" : (hud.teamHasBall ? "CALL" : "PRESS"),
+                             icon: hud.hasBall ? "arrow.up.right" : (hud.teamHasBall ? "hand.raised.fill" : "person.2.fill"),
                              size: 74, color: Color(hex: 0x39D98A), input: input, button: .pass, charge: -1)
                     .position(x: br.x - 112, y: br.y + 18)
                 ActionButton(label: hud.hasBall ? "SKILL" : "SLIDE", icon: hud.hasBall ? "sparkles" : "figure.fall",

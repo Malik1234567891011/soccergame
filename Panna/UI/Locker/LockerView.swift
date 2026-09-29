@@ -131,6 +131,22 @@ struct LockerView: View {
                     }
                 }
             }
+            let mine = Catalog.prospects.filter { (store.p.prospects[$0.id] ?? 0) > 0 && $0.model != nil }
+            section("PLAY AS A PROSPECT") {
+                if mine.isEmpty {
+                    Text("Pull Prospects in Scout (or beat Career bosses) to play as them.").font(.label(11)).foregroundStyle(.white.opacity(0.55))
+                }
+                ForEach(mine) { pr in
+                    Button { set { $0.look = pr.id } } label: {
+                        Group {
+                            if let img = Art.image(pr.portrait) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray }
+                        }
+                        .frame(width: 58, height: 58).clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(draft.look == pr.id ? Theme.green : pr.rarity.color.opacity(0.9), lineWidth: draft.look == pr.id ? 3 : 2))
+                    }
+                    .buttonStyle(PressStyle())
+                }
+            }
             section("NAME") {
                 TextField("Name", text: Binding(get: { store.p.name }, set: { store.p.name = String($0.prefix(12)) }))
                     .font(.display(20)).foregroundStyle(.white)

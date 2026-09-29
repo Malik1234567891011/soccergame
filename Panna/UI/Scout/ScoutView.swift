@@ -80,7 +80,7 @@ struct ScoutView: View {
                             .opacity(store.p.gems >= ProfileStore.tenCost ? 1 : 0.45)
                     }
                     HStack(spacing: 16) {
-                        Button("ODDS & RULES") { showOdds = true }.font(.label(11, .black)).foregroundStyle(.white.opacity(0.7))
+                        Button("WHAT'S INSIDE · ODDS") { showOdds = true }.font(.label(11, .black)).foregroundStyle(.white.opacity(0.7))
                         Button("SHARD EXCHANGE") { app.go(.squad) }.font(.label(11, .black)).foregroundStyle(Theme.purple)
                     }
                 }
@@ -95,6 +95,7 @@ struct ScoutView: View {
             if revealing { PackReveal(pulls: pulls) { revealing = false } }
         }
         .onAppear {
+            if ProcessInfo.processInfo.environment["PANNA_ODDS"] != nil { showOdds = true }   // QA
             if let n = ProcessInfo.processInfo.environment["PANNA_AUTOPULL"], let c = Int(n) {
                 store.p.gems += 2000
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { open(c, free: c == 1) }
@@ -116,27 +117,66 @@ struct ScoutView: View {
         revealing = true
     }
 
+    /// Per-item odds for a single pull (before pity), matching ProfileStore.grant.
+    static func itemOdds() -> [(Rarity, Double, [(String, String, Double)])] {
+        ProfileStore.rates.map { r, rate in
+            if r == .common { return (r, rate, [("250 COINS", "or", rate / 2), ("15 SHARDS", "or", rate / 2)]) }
+            let pros = Catalog.prospects.filter { $0.rarity == r }
+            let legs = Catalog.legacies.filter { $0.rarity == r }
+            let pShare = pros.isEmpty ? 0 : (legs.isEmpty ? 1 : (r == .rare ? 0.2 : 0.3))
+            var items: [(String, String, Double)] = []
+            for p in pros { items.append((p.name.uppercased(), "PROSPECT · playable + squad", rate * pShare / Double(pros.count))) }
+            for l in legs { items.append((l.title.uppercased(), "LEGACY · \(l.slotName) · \(l.legend)", rate * (1 - pShare) / Double(legs.count))) }
+            return (r, rate, items)
+        }
+    }
+
     var oddsSheet: some View {
         ZStack {
-            Color(hex: 0x05060C).opacity(0.9).ignoresSafeArea().onTapGesture { showOdds = false }
+            Color(hex: 0x05060C).opacity(0.92).ignoresSafeArea().onTapGesture { showOdds = false }
             VStack(alignment: .leading, spacing: 8) {
-                Text("ODDS").font(.display(24)).foregroundStyle(.white)
-                ForEach(ProfileStore.rates, id: \.0) { r in
-                    HStack {
-                        RarityBadge(rarity: r.0)
-                        Spacer()
-                        Text(String(format: "%.1f%%", r.1 * 100)).font(.label(14, .black)).foregroundStyle(.white)
-                    }
-                    .frame(width: 300)
+                HStack {
+                    Text("WHAT'S IN THE PACK").font(.display(22)).foregroundStyle(.white)
+                    Spacer()
+                    Button { showOdds = false } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 24)).foregroundStyle(.white.opacity(0.6)) }
                 }
-                Text("• Legendary chance rises by 6% per pull after 40 pulls without one; guaranteed at 60. Counter carries over forever.")
-                Text("• Every ×10 pack contains at least one Epic or better.")
-                Text("• Duplicates raise Mastery (max 5★); beyond that they become Shards to buy any card you want.")
-                Text("• Common results: 250 coins or 15 shards. Techniques are sidegrades — skill always beats spending.")
+                Text("Prospects are footballers: they join your squad as teammates, and you can play as them from the Locker. Legacies are techniques from real legends you equip.")
+                    .font(.label(11)).foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
+                ScrollView(showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(ScoutView.itemOdds(), id: \.0) { r, rate, items in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    RarityBadge(rarity: r)
+                                    Spacer()
+                                    Text(String(format: "%.1f%% total", rate * 100)).font(.label(12, .black)).foregroundStyle(.white)
+                                }
+                                ForEach(items, id: \.0) { name, kind, odds in
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 0) {
+                                            Text(name).font(.label(12, .black)).foregroundStyle(.white)
+                                            Text(kind).font(.label(9)).foregroundStyle(.white.opacity(0.5))
+                                        }
+                                        Spacer()
+                                        Text(String(format: odds < 0.01 ? "%.2f%%" : "%.1f%%", odds * 100)).font(.label(12, .black)).foregroundStyle(r.color)
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("• Legendary chance rises 6% per pull after 40 pulls without one; guaranteed at 60. The counter carries over forever.")
+                            Text("• Every ×10 pack contains at least one Epic or better.")
+                            Text("• Duplicates raise Mastery (max 5★); beyond that they become Shards to buy exactly the card you want.")
+                            Text("• Techniques are sidegrades — skill always beats spending.")
+                        }
+                        .font(.label(10)).foregroundStyle(.white.opacity(0.6))
+                    }
+                    .padding(.trailing, 8)
+                }
             }
-            .font(.label(11)).foregroundStyle(.white.opacity(0.8))
-            .frame(width: 420, alignment: .leading)
-            .padding(24)
+            .frame(width: 460, height: 330, alignment: .topLeading)
+            .padding(22)
             .background(RoundedRectangle(cornerRadius: 18).fill(Theme.panel))
         }
     }

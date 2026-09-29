@@ -200,6 +200,8 @@ enum Catalog {
     static func prospect(_ id: String) -> Prospect? { prospects.first { $0.id == id } }
 
     /// Painted roster looks that have a built model in the bundle (l01, l02, …).
+    /// Portrait for any playable look: an avatar look or an owned Prospect you play as.
+    static func lookPortrait(_ id: String) -> String { prospect(id) != nil ? "prospect_" + id : "look_" + id }
     static let looks: [String] = (1...40).map { String(format: "l%02d", $0) }.filter { CharacterModel.exists($0) }
 
     private static func prospect(_ id: String, _ name: String, _ nation: String, _ flag: String, _ title: String, _ ps: Playstyle, _ r: Rarity,

@@ -158,10 +158,11 @@ final class AppModel: ObservableObject {
         }
         let myKit = store.p.appearance
         var home = [mySetup(human: !bots)]
-        for id in store.p.squad.prefix(2) {
+        // Playing as a Prospect yourself: they don't also appear as a teammate.
+        for id in store.p.squad.filter({ $0 != myKit.look }).prefix(2) {
             home.append(prospectParticipant(id, kit: myKit, level: store.p.prospects[id] ?? 1))
         }
-        while home.count < 3 { home.append(prospectParticipant("rex", kit: myKit, level: 1)) }
+        while home.count < 3 { home.append(prospectParticipant(myKit.look == "rex" ? "juno" : "rex", kit: myKit, level: 1)) }
         var away = crew(oppName, skill: aiSkill, boss: boss)
         let kit = AppModel.crewKit(oppName)
         // Team identity colour for rings/outlines/HUD: dark kits use their bright trim colour.
