@@ -290,7 +290,9 @@ def build_cloth(key, cal):
     ok = (sat > 0.4) & (mx_ > 0.12)
     red = ok & (dr < tol)
     yh = (cal.get('yellow') or (0.14, 0))[0]
-    yel = (sat > 0.3) & (mx_ > 0.3) & (np.abs(hue - yh) < 0.035)
+    sh_ = (cal.get('skin') or (0.07, 0))
+    yel = (sat > 0.5) & (mx_ > 0.35) & (np.abs(hue - yh) < 0.025)
+    if sh_[1] > 0.3: yel &= (hue - sh_[0]) > 0.045   # skin highlights drift toward gold: never trim
     blu = (sat > 0.25) & (mx_ > 0.08) & (np.abs(hue - ((cal.get('blue') or (0.63, 0))[0])) < 0.12)
     grn = (sat > 0.25) & (mx_ > 0.08) & (np.abs(hue - ((cal.get('green') or (0.37, 0))[0])) < 0.14)
     def dil(m_, n):
@@ -727,6 +729,33 @@ for _ in range(3):
             nv[i] = tuple(sum(x[k] for x in ns) / len(ns) for k in range(3))
     vcol = nv
 vc_layer = obj.data.color_attributes.new(name='vcol', type='FLOAT_COLOR', domain='POINT')
+# Hidden patches (under the arms in the A-pose, inner arms) are never seen by the drawings and get guessed by the
+# flood fill — sometimes ink or skin. They show the moment an arm swings. Fill them from the confidently painted
+# surface at the same height on the same body part (torso vs arm).
+_zs = [(v.co.z - zmin) / (zmax - zmin) for v in obj.data.vertices]
+_bands = {}
+for i_, v in enumerate(obj.data.vertices):
+    if vconf[i_] > 0.5 and 0.05 < _zs[i_] < 0.84:
+        _bands.setdefault((zones[i_], int(_zs[i_] / 0.025)), []).append(vcol[i_])
+_patched = 0
+for i_, v in enumerate(obj.data.vertices):
+    # core torso only (shirt band, inside the torso's width, not arm geometry), and only colours that aren't kit
+    if vconf[i_] >= 0.3 or not (0.56 < _zs[i_] < 0.8) or zones[i_] != 0: continue
+    if abs(v.co.x) > _thw0 * 0.92 or kit_like(vcol[i_]): continue
+    key_ = (zones[i_], int(_zs[i_] / 0.025))
+    pool = _bands.get(key_) or _bands.get((key_[0], key_[1] - 1)) or _bands.get((key_[0], key_[1] + 1))
+    if not pool or len(pool) < 6: continue
+    arr = np.array(pool)
+    # median colour of the confident band (robust to the odd ink texel)
+    vcol[i_] = tuple(float(x) for x in np.median(arr, 0)); _patched += 1
+# Sleeves: arm geometry above the elbow is shirt; unseen sleeve sides take the confident sleeve colour.
+_sleeve = [vcol[i_] for i_ in range(len(vcol)) if zones[i_] == 1 and _zs[i_] > 0.7 and vconf[i_] > 0.5 and kit_like(vcol[i_]) and max(vcol[i_]) > 0.25]
+if len(_sleeve) > 10:
+    _sm = tuple(float(x) for x in np.median(np.array(_sleeve), 0))
+    for i_ in range(len(vcol)):
+        if zones[i_] == 1 and _zs[i_] > 0.7 and vconf[i_] < 0.3 and not kit_like(vcol[i_]):
+            vcol[i_] = _sm; _patched += 1
+print('UNIQUE hidden patches filled from their band:', _patched)
 def _lin(x): return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
 # Image pixels are sRGB-encoded; colour attributes are linear (otherwise the fill bakes out washed-out).
 for i, c in enumerate(vcol): vc_layer.data[i].color = (_lin(c[0]), _lin(c[1]), _lin(c[2]), vconf[i])
@@ -978,6 +1007,73 @@ subprocess.run(['sips', '-s', 'format', 'png', '-m', '/System/Library/ColorSync/
 obj.data.materials.clear()
 for m_ in saved_mats: obj.data.materials.append(m_)
 print('UNIQUE kit mask', mask_path)
+
+# ------------------------------------------------------------------ cloth cleanup (flat code-kit colours)
+# The kit is flat colour, so on cloth every texel snaps to its kit class, keeping painted shading (clamped so
+# fold shadows never go black). Isolated blobs (red/yellow seam blends, back-view smudges) take their
+# neighbourhood's class. This is what makes shirts read clean from every angle.
+if not os.environ.get('NO_CLOTHCLEAN'):
+    import colorsys as _c2
+    T = TEX
+    tex = np.array(bake_img.pixels[:], dtype=np.float32).reshape(T, T, 4)[:, :, :3]
+    reg = np.array(mimg.pixels[:], dtype=np.float32).reshape(1024, 1024, 4)[:, :, 0]
+    reg = np.repeat(np.repeat(reg, T // 1024, 0), T // 1024, 1)
+    mx_ = tex.max(2); mn_ = tex.min(2); d_ = mx_ - mn_
+    sat = d_ / np.maximum(mx_, 1e-6)
+    hue = np.zeros_like(mx_); nz = d_ > 1e-6
+    r_, g_, b_ = tex[:, :, 0], tex[:, :, 1], tex[:, :, 2]
+    ir = nz & (mx_ == r_); ig = nz & (mx_ == g_) & ~ir; ib = nz & ~ir & ~ig
+    hue[ir] = ((g_ - b_)[ir] / d_[ir]) % 6; hue[ig] = (b_ - r_)[ig] / d_[ig] + 2; hue[ib] = (r_ - g_)[ib] / d_[ib] + 4
+    hue /= 6
+    cal = _cal if '_cal' in globals() else {}
+    hues = {'red': (cal.get('red') or (0.0, 0))[0] % 1.0, 'yellow': (cal.get('yellow') or (0.14, 0))[0],
+            'blue': (cal.get('blue') or (0.63, 0))[0], 'green': (cal.get('green') or (0.37, 0))[0]}
+    cloth = reg > 0.5
+    _sk = cal.get('skin') or (0.07, 0)
+    if _sk[1] > 0.25:   # never snap skin (cheeks, necks, beards near the collar) to a kit colour
+        _ds = np.abs(hue - _sk[0]); _ds = np.minimum(_ds, 1 - _ds)
+        cloth &= ~((_ds < 0.03) & (sat > 0.2) & (sat < 0.85))
+    classes = []
+    for name, h0 in hues.items():
+        dh = np.abs(hue - h0); dh = np.minimum(dh, 1 - dh)
+        classes.append((name, cloth & (sat > 0.22) & (mx_ > 0.08), dh))
+    # nearest-hue class for coloured cloth texels; orange/purple seam blends fall to their nearest kit colour
+    dstack = np.stack([c[2] for c in classes], 0)
+    cls = np.argmin(dstack, 0)
+    coloured = cloth & (sat > 0.22) & (mx_ > 0.08) & (np.min(dstack, 0) < 0.09)
+    white = np.zeros_like(cloth)   # the code kit has no white: pale cloth texels are artifacts, absorbed below
+    # neighbourhood majority (box counts) to absorb small blobs and dark smudges
+    def boxf(a_, r_=5):
+        c_ = np.cumsum(np.cumsum(np.pad(a_, ((r_ + 1, r_), (r_ + 1, r_)), mode='edge'), 0), 1)
+        k_ = 2 * r_ + 1
+        return (c_[k_:, k_:] - c_[:-k_, k_:] - c_[k_:, :-k_] + c_[:-k_, :-k_]) / (k_ * k_)
+    votes = np.stack([boxf(((cls == i) & coloured).astype(np.float32)) for i in range(len(classes))], 0)
+    wvote = boxf(white.astype(np.float32))
+    major = np.argmax(votes, 0); mvote = votes.max(0)
+    out = tex.copy()
+    refs = []
+    for i in range(len(classes)):
+        sel = coloured & (cls == i) & (sat > 0.45)
+        refs.append(np.median(tex[sel], 0) if sel.sum() > 50 else None)
+    lum = tex @ np.array([0.3, 0.59, 0.11], dtype=np.float32)
+    changed = 0
+    for i, ref in enumerate(refs):
+        if ref is None: continue
+        rl = float(ref @ np.array([0.3, 0.59, 0.11]))
+        # members: coloured texels of this class, plus dark smudges / minority blobs where this class dominates
+        blob = cloth & ~white & (major == i) & (mvote > 0.55) & ((cls != i) | ~coloured)
+        # dark smudges: any dark texel where this kit colour is the clear local majority
+        dark_smudge = cloth & (major == i) & (mvote > 0.3) & ((lum < rl * 0.75) | (sat < 0.2)) & ((cls != i) | ~coloured)
+        member = (coloured & (cls == i) & (mvote > 0.25)) | (blob & coloured) | dark_smudge
+        shade = np.clip(lum / max(rl, 1e-4), 0.55, 1.15)[..., None]
+        out[member] = np.clip(ref[None, :] * shade[member], 0, 1)
+        changed += int(member.sum())
+    tex4 = np.dstack([out, np.ones((T, T), np.float32)])
+    bake_img.pixels[:] = tex4.ravel(); bake_img.update()
+    bake_img.filepath_raw = tex_path; bake_img.file_format = 'PNG'; bake_img.save()
+    subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '88', tex_path, '--out', jpg], capture_output=True)
+    if os.path.exists(jpg) and '/Panna/Resources/' in tex_path: os.remove(tex_path)
+    print('UNIQUE cloth cleaned', changed, 'texels')
 
 # ------------------------------------------------------------------ export (same binary format as base.bin)
 C = Matrix(((1, 0, 0, 0), (0, 0, 1, 0), (0, -1, 0, 0), (0, 0, 0, 1)))

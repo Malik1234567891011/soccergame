@@ -96,8 +96,10 @@ enum KitRecolor {
                     // Jersey hue comes from the character's own sheet; the tolerance tightens when skin is a saturated near-red.
                     let satR = max(satW, smooth(0.14, 0.28, sat) * smooth(0.06, 0.16, mx) * region * (1 - smooth(tolRe * 0.5, tolRe * 0.9, dRed)))
                     let wRed = (1 - smooth(tolRe, tolRe + 0.012, dRed)) * satR
-                    let tolY = 0.028 + 0.03 * loose
-                    let wYel = (1 - smooth(tolY, tolY + 0.014, abs(hue - cal.yellow))) * satW
+                    let tolY = 0.026 + 0.012 * loose
+                    // Tan skin highlights drift toward gold: keep them out of the trim.
+                    let skinGuard = cal.skinSat > 0.3 ? smooth(0.035, 0.055, hue - cal.skinHue) : 1
+                    let wYel = (1 - smooth(tolY, tolY + 0.014, abs(hue - cal.yellow))) * satW * skinGuard
                     // Blue shorts / green socks sit far from skin and hair hues, so faded paint is caught too.
                     let satC = smooth(0.1, 0.24, sat) * smooth(0.04, 0.1, mx) * region
                     let wBlu = (1 - smooth(0.1, 0.14, abs(hue - cal.blue))) * satC
@@ -108,19 +110,7 @@ enum KitRecolor {
                         o = (o.0 + (c.0 * sh - o.0) * wt, o.1 + (c.1 * sh - o.1) * wt, o.2 + (c.2 * sh - o.2) * wt)
                     }
                     if wRed > 0 { mixIn(P, wRed, shade) }
-                    // Bright orange = jersey red bleeding into the trim. Only where it cannot be this character's skin.
-                    let skinClash = (cal.skinSat > 0.45 ? (1 - smooth(0.015, 0.03, abs(hue - cal.skinHue))) : 0) * (1 - loose)
-                    let wOr = smooth(0.7 - 0.3 * loose, 0.8 - 0.3 * loose, sat) * smooth(0.5 - 0.35 * loose, 0.62 - 0.35 * loose, mx) * smooth(0.028, 0.04, hue) * (1 - smooth(0.095, 0.11, hue)) * (1 - skinClash) * region
-                    if wOr > 0 {
-                        let t = min(1, max(0, (hue - 0.03) / 0.08))
-                        mixIn((P.0 + (S.0 - P.0) * t, P.1 + (S.1 - P.1) * t, P.2 + (S.2 - P.2) * t), wOr, shade)
-                    }
-                    // Purple = jersey red blending into shorts blue at the hem.
-                    let wPu = smooth(0.35, 0.5, sat) * smooth(0.72, 0.76, hue) * (1 - smooth(0.9, 0.93, hue)) * smooth(0.08, 0.16, mx) * region
-                    if wPu > 0 {
-                        let t = min(1, max(0, (hue - 0.74) / 0.17))
-                        mixIn((B.0 + (P.0 - B.0) * t, B.1 + (P.1 - B.1) * t, B.2 + (P.2 - B.2) * t), wPu, max(shade, 0.35))
-                    }
+                    // (Seam blends are snapped to flat kit colours at bake time — no orange/purple guessing here.)
                     if wYel > 0 { mixIn(S, wYel, shade) }
                     if wBlu > 0 { mixIn(B, wBlu, max(shade, 0.35)) }
                     if wGrn > 0 { mixIn(G, wGrn, shade) }
