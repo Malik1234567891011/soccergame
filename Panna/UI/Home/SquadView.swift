@@ -291,6 +291,7 @@ struct ProfileView: View {
                     Toggle("Music", isOn: Binding(get: { store.p.settings.music }, set: { store.p.settings.music = $0; AudioEngine.shared.setMusic($0); store.save() }))
                     Toggle("Sound effects", isOn: Binding(get: { store.p.settings.sfx }, set: { store.p.settings.sfx = $0; AudioEngine.shared.sfxVolume = $0 ? 1 : 0; store.save() }))
                     Toggle("Haptics", isOn: Binding(get: { store.p.settings.haptics }, set: { store.p.settings.haptics = $0; store.save() }))
+                    Toggle("Left-handed controls", isOn: Binding(get: { UserDefaults.standard.bool(forKey: "leftHanded") }, set: { UserDefaults.standard.set($0, forKey: "leftHanded"); store.p.settings.leftHanded = $0; store.save() }))
                 }
                 .font(.label(14)).foregroundStyle(.white)
                 .tint(Theme.green)

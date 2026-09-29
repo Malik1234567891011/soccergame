@@ -71,6 +71,20 @@ final class MatchRenderer {
             scene.rootNode.addChildNode(holder)
             rigs.append(rig)
             playerNodes.append(holder)
+            // Soft blob shadow (cheaper and cleaner than a shadow map from the broadcast angle).
+            let blob = SCNPlane(width: 1.1, height: 1.1)
+            let bm = SCNMaterial()
+            bm.lightingModel = .constant
+            bm.diffuse.contents = MatchRenderer.blobImage
+            bm.writesToDepthBuffer = false
+            bm.transparency = 0.55
+            blob.materials = [bm]
+            let bn = SCNNode(geometry: blob)
+            bn.eulerAngles.x = -.pi / 2
+            bn.position.y = 0.012
+            bn.castsShadow = false
+            holder.addChildNode(bn)
+            rig.root.enumerateHierarchy { n, _ in n.castsShadow = false }
             // Team ring.
             let col = teamColors[i / 4]
             let isLocal = localHumans.contains(i)
@@ -117,6 +131,12 @@ final class MatchRenderer {
         passMarker.isHidden = true
         passMarker.castsShadow = false
         scene.rootNode.addChildNode(passMarker)
+    }
+
+    static let blobImage: UIImage = Tex.render(CGSize(width: 64, height: 64), key: "blob") { c, _ in
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let g = CGGradient(colorsSpace: cs, colors: [UIColor(white: 0, alpha: 0.8).cgColor, UIColor(white: 0, alpha: 0).cgColor] as CFArray, locations: [0, 1])!
+        c.drawRadialGradient(g, startCenter: CGPoint(x: 32, y: 32), startRadius: 0, endCenter: CGPoint(x: 32, y: 32), endRadius: 32, options: [])
     }
 
     static let ballTexture: UIImage = Tex.render(CGSize(width: 512, height: 256), key: "ball") { c, s in

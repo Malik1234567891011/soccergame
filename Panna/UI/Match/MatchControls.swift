@@ -5,7 +5,7 @@ import PannaCore
 struct MatchControls: View {
     let input: InputBox
     let hud: HUDState
-    var leftHanded = false
+    @AppStorage("leftHanded") var leftHanded = false
 
     @State private var stickOrigin: CGPoint? = nil
     @State private var stickPos: CGPoint = .zero
@@ -18,7 +18,7 @@ struct MatchControls: View {
                 Color.clear
                     .contentShape(Rectangle())
                     .frame(width: geo.size.width * 0.45, height: geo.size.height)
-                    .position(x: geo.size.width * 0.225, y: geo.size.height / 2)
+                    .position(x: leftHanded ? geo.size.width * 0.775 : geo.size.width * 0.225, y: geo.size.height / 2)
                     .gesture(
                         DragGesture(minimumDistance: 0, coordinateSpace: .named("controls"))
                             .onChanged { v in
@@ -60,12 +60,12 @@ struct MatchControls: View {
                     // Resting hint.
                     Circle().stroke(.white.opacity(0.18), lineWidth: 2).frame(width: radius * 2, height: radius * 2)
                         .overlay(Circle().fill(.white.opacity(0.18)).frame(width: 40, height: 40))
-                        .position(x: 130, y: geo.size.height - 120)
+                        .position(x: leftHanded ? geo.size.width - 130 : 130, y: geo.size.height - 120)
                         .allowsHitTesting(false)
                 }
 
                 // Action cluster.
-                let br = CGPoint(x: geo.size.width - 96, y: geo.size.height - 92)
+                let br = CGPoint(x: leftHanded ? 250 : geo.size.width - 96, y: geo.size.height - 92)
                 ActionButton(label: hud.hasBall ? "SHOOT" : "TACKLE", icon: hud.hasBall ? "scope" : "shield.lefthalf.filled",
                              size: 96, color: hud.hasBall ? Color(hex: 0xFF3B5C) : Color(hex: 0x3B8CFF), input: input, button: .shoot,
                              charge: hud.hasBall ? hud.charge : -1)

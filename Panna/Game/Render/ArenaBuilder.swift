@@ -34,6 +34,22 @@ final class ArenaBuilder {
         ambience()
         // Only players, ball and goals cast shadows; thin props make streaky artifacts.
         root.enumerateHierarchy { n, _ in n.castsShadow = false }
+        flattenStatics()
+    }
+
+    /// Merge static props into one node (hundreds of draw calls → a handful per material).
+    private func flattenStatics() {
+        let keep = Set(crowd.map { ObjectIdentifier($0) })
+        let statics = root.childNodes.filter { n in
+            n.geometry != nil && n.light == nil && (n.particleSystems ?? []).isEmpty && !n.hasActions
+                && n.childNodes.isEmpty && !keep.contains(ObjectIdentifier(n)) && !(n.geometry is SCNFloor)
+        }
+        guard statics.count > 8 else { return }
+        let holder = SCNNode()
+        for n in statics { n.removeFromParentNode(); holder.addChildNode(n) }
+        let flat = holder.flattenedClone()
+        flat.castsShadow = false
+        root.addChildNode(flat)
     }
 
     // MARK: Ambience
@@ -132,7 +148,7 @@ final class ArenaBuilder {
         key.type = .directional
         key.color = UIColor(hex: t.key)
         key.intensity = t.keyIntensity * (t.night ? 0.45 : 1)
-        key.castsShadow = true
+        key.castsShadow = false   // players use blob shadows: saves a full shadow-map pass
         key.shadowMode = .deferred
         key.shadowMapSize = CGSize(width: 2048, height: 2048)
         key.shadowSampleCount = 8
@@ -210,7 +226,7 @@ final class ArenaBuilder {
     private func ground() {
         let t = theme
         let floor = SCNFloor()
-        floor.reflectivity = t.floor == .court || t.props == .neonCity ? 0.12 : (t.id == "cage" ? 0.08 : 0.03)
+        floor.reflectivity = 0   // a reflection pass re-renders the whole scene; not worth it on phones
         floor.reflectionFalloffEnd = 6
         let m = Mat.textured(Tex.noise(256, seed: 3, base: UIColor(hex: t.surround), variance: 0.08), rough: 0.85, rim: 0)
         m.diffuse.contentsTransform = SCNMatrix4MakeScale(40, 40, 1)

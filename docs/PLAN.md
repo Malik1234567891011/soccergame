@@ -43,12 +43,16 @@ The brief called it STREET XI; "XI" implies 11-a-side, which this game deliberat
   a heavy Flow awakening (freeze, eye flare, heartbeat); inner-monologue barks; post-match MVP screen; selection-style career.
 
 ## Roadmap (living)
-- [x] Core sim + bots + keepers, headless tests
-- [x] Anime character pipeline, cel shading, faces, hairstyles
-- [x] Venue look pass: night lighting, painted backdrops, intro flyover
-- [ ] Profile/economy/persistence; Home hub; Locker (customisation w/ live 3D); Career road; Scout packs (odds/pity) + reveal
-- [ ] Market Value + Weapons + ranked ladder (vs bots offline, vs humans online)
-- [ ] **Online**: Swift authoritative server (shared PannaCore), WebSocket, matchmaking queues (1v1/2v2/3v3 PvP, co-op vs bots), ranks
-- [ ] Real audio: music + crowd (replace synthesized crowd hiss)
-- [ ] Feel pass by actually playing: controls, AI teammates, pacing, Flow presentation
-- [ ] 2D anime splash art for Prospects/Legacies (gpt-image-1), app icon
+- [x] Core sim + bots + keepers, headless tests; AI quality metrics (clumping, wall time, stuck ball, turnovers, interceptions)
+- [x] Characters v2: **painted anime pipeline** (gpt-image model sheets → Hunyuan3D-2 mesh → multi-view projection bake → auto-rig),
+      12 Prospects + 16 avatar looks with runtime kit-tint shader; procedural "classic builder" kept as fallback
+- [x] Venues: painted backdrops, night lighting, intro flyover, painted crowd strips, ambience (rain etc.), VS card
+- [x] Meta: profile/economy, Market Value road, Scout packs (odds/pity/walkouts), Locker, Squad, Career road, Street Pass, quests, shop
+- [x] Single-player forever: Career (48 matches + bosses), THE SELECTION roguelite, Daily Moments, adaptive Quick Match
+- [x] Online: authoritative Swift server, ranked/duel/co-op/rooms, RP + leaderboard, Crews with weekly points, name moderation
+- [x] Juice: cut-ins (Flow, Panna), hit-stop, slow-mo, shake, real SFX + music, CLIP IT replays with ReplayKit share
+- [x] Perf: flattened statics, no floor reflection, blob shadows (1.6M→~0.5M tris, 507→~180 draw calls)
+- [ ] Deploy server (needs `railway login` — docs/NEEDS_MALIK.md)
+- [ ] Game Center leaderboards/achievements (needs App Store Connect setup)
+- [ ] Left-handed controls, accessibility options
+- [ ] More Prospects / seasonal banner content; Legacy mastery visuals
