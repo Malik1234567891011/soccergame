@@ -60,10 +60,14 @@ enum MatchFactory {
             infos.append(RenderPlayerInfo(appearance: k, celebration: 0, name: "Keeper"))
             names.append("Keeper")
         }
-        let renderer = MatchRenderer(theme: spec.theme, players: infos,
-                                     teamColors: [UIColor(hex: spec.homeColor), UIColor(hex: spec.awayColor)],
-                                     humanId: driver.localPlayer, localHumans: driver.localPlayer >= 0 ? [driver.localPlayer] : [])
-        renderer.celebrations = infos.map { $0.celebration }
+        let make: () -> MatchRenderer = {
+            let r = MatchRenderer(theme: spec.theme, players: infos,
+                                  teamColors: [UIColor(hex: spec.homeColor), UIColor(hex: spec.awayColor)],
+                                  humanId: driver.localPlayer, localHumans: driver.localPlayer >= 0 ? [driver.localPlayer] : [])
+            r.celebrations = infos.map { $0.celebration }
+            return r
+        }
+        let renderer = make()
         let flow = driver.localPlayer >= 0 ? driver.state.players[driver.localPlayer].loadout.playstyle.flowName : "FLOW"
         let c = MatchController(driver: driver, renderer: renderer, playerNames: names, flowName: flow)
         var portraits: [String?] = []
@@ -77,6 +81,7 @@ enum MatchFactory {
             portraits.append(nil)
         }
         c.portraits = portraits
+        c.rendererFactory = make
         return c
     }
 }

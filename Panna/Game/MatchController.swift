@@ -143,11 +143,21 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
     private let notify = UINotificationFeedbackGenerator()
     /// Full event log for post-match stats / highlights. Written on the render thread; read via `log`.
     private var _log: [(Float, MatchEvent)] = []
+    /// Rolling 6 s of states; frozen into a highlight whenever a goal goes in.
+    private var ring: [MatchState] = []
+    private var ringTick = 0
+    struct Highlight { var states: [MatchState]; var scorer: Int; var team: Int; var time: Float }
+    private var _highlights: [Highlight] = []
+    var highlights: [Highlight] { lock.lock(); defer { lock.unlock() }; return _highlights }
     private var _state = MatchState()
     private let lock = NSLock()
     var log: [(Float, MatchEvent)] { lock.lock(); defer { lock.unlock() }; return _log }
     /// Thread-safe copy of the latest match state for UI code on the main thread.
     var state: MatchState { lock.lock(); defer { lock.unlock() }; return _state }
+
+    /// Recreate a renderer with the same venue and characters (used by clip replays).
+    var rendererFactory: (() -> MatchRenderer)?
+    func rebuildRenderer() -> MatchRenderer { rendererFactory?() ?? renderer }
 
     init(driver: MatchDriver, renderer: MatchRenderer, playerNames: [String], flowName: String) {
         self.driver = driver
@@ -187,6 +197,23 @@ final class MatchController: NSObject, ObservableObject, SCNSceneRendererDelegat
         lock.lock()
         _state = s
         for e in events { _log.append((s.time, e)) }
+        if s.tick != ringTick {
+            ringTick = s.tick
+            if s.phase == .playing || s.phase == .goal {
+                ring.append(s)
+                if ring.count > 400 { ring.removeFirst(ring.count - 400) }
+            }
+        }
+        for e in events {
+            if case .goal(let team, let scorer, _, _) = e {
+                // Keep the build-up plus ~1.5 s of celebration (filled in on later ticks).
+                _highlights.append(Highlight(states: ring, scorer: scorer, team: team, time: s.time))
+            }
+        }
+        if var last = _highlights.last, s.phase == .goal, s.phaseT < 1.6, last.states.last?.tick != s.tick {
+            last.states.append(s)
+            _highlights[_highlights.count - 1] = last
+        }
         lock.unlock()
         for e in events {
             react(e, s)

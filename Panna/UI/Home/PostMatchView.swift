@@ -8,6 +8,7 @@ struct PostMatchView: View {
     @State private var shownValue: Double = 0
     @State private var xpFrac: Double = 0
     @State private var step = 0
+    @State private var showClip = false
 
     var body: some View {
         let r = app.lastReport
@@ -99,13 +100,21 @@ struct PostMatchView: View {
                     Spacer()
                     HStack(spacing: 12) {
                         GlowButton(title: primaryTitle, icon: "arrow.clockwise", height: 58) { app.rematch() }
-                            .frame(width: 240)
+                            .frame(width: 230)
+                        if let m = app.match, !m.highlights.isEmpty {
+                            Button { showClip = true } label: {
+                                Label("CLIP IT", systemImage: "film.stack").font(.display(16)).foregroundStyle(.black)
+                                    .frame(width: 130, height: 52)
+                                    .background(Skew(amount: 13).fill(Theme.gold))
+                            }
+                            .buttonStyle(PressStyle())
+                        }
                         Button {
                             AudioEngine.shared.play(.uiBack)
                             app.leavePostMatch()
                         } label: {
                             Text("CONTINUE").font(.display(18)).foregroundStyle(.white)
-                                .frame(width: 150, height: 52)
+                                .frame(width: 130, height: 52)
                                 .background(Skew(amount: 13).fill(.white.opacity(0.1)))
                         }
                         .buttonStyle(PressStyle())
@@ -116,7 +125,17 @@ struct PostMatchView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .onAppear(perform: animateIn)
+        .onAppear {
+            animateIn()
+            if ProcessInfo.processInfo.environment["PANNA_AUTOCLIP"] != nil, app.match.map({ !$0.highlights.isEmpty }) == true {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { showClip = true }
+            }
+        }
+        .fullScreenCover(isPresented: $showClip) {
+            if let m = app.match, let h = bestHighlight(m) {
+                ClipView(controller: m, highlight: h) { showClip = false }
+            }
+        }
     }
 
     var primaryTitle: String {
@@ -126,6 +145,12 @@ struct PostMatchView: View {
         }
         if case .career = app.lastReport?.mode { return app.lastReport?.won == true ? "NEXT MATCH" : "TRY AGAIN" }
         return "PLAY AGAIN"
+    }
+
+    /// Prefer the player's own goals, latest first.
+    func bestHighlight(_ m: MatchController) -> MatchController.Highlight? {
+        let hs = m.highlights
+        return hs.last { $0.scorer == m.humanId } ?? hs.last
     }
 
     func stat(_ label: String, _ v: Int) -> some View {
