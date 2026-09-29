@@ -411,8 +411,8 @@ final class MatchRenderer {
         // Colour grade for flow / slow-mo.
         let humanFlow = human?.inFlow ?? false
         flowGrade += ((humanFlow ? 1 : 0) - flowGrade) * min(1, dt * 4)
-        camera.saturation = CGFloat(1.12 + flowGrade * 0.35)
-        camera.bloomIntensity = CGFloat(0.9 + flowGrade * 0.8 + slowmoGrade * 0.6)
+        camera.saturation = CGFloat(1.12 + flowGrade * 0.12)
+        camera.bloomIntensity = CGFloat(0.9 + flowGrade * 0.35 + slowmoGrade * 0.6)
         camera.colorFringeStrength = CGFloat(0.4 + flowGrade * 1.2 + slowmoGrade * 1.5)
         camera.vignettingIntensity = CGFloat(0.55 + flowGrade * 0.35 + slowmoGrade * 0.3)
         camera.wantsDepthOfField = celebrationCam > 0.3

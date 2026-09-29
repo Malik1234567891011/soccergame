@@ -36,6 +36,7 @@ enum MatchFactory {
     static func offline(_ spec: MatchSpec) -> MatchController {
         var home = teamSetup(spec.home, name: spec.homeName, color: spec.homeColor, ai: spec.homeAISkill, keeper: spec.keeperSkill[0])
         home.mods = spec.homeMods
+        if ProcessInfo.processInfo.environment["PANNA_FULLFLOW"] != nil { home.mods.startHype = 100 }   // QA: Flow FX
         let away = teamSetup(spec.away, name: spec.awayName, color: spec.awayColor, ai: spec.awayAISkill, keeper: spec.keeperSkill[1])
         let sim = MatchSim(home: home, away: away, rules: spec.rules, seed: spec.seed)
         let c = controller(driver: OfflineDriver(sim: sim, localPlayer: spec.humanId), spec: spec)

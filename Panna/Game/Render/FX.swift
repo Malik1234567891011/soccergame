@@ -75,24 +75,27 @@ enum FX {
     }
 
     static func aura(color: UIColor) -> SCNParticleSystem {
+        // Anime "power up": thin streaks rising off the body, not a fog of soft blobs.
         let p = SCNParticleSystem()
-        p.birthRate = 70
+        p.birthRate = 38
         p.loops = true
-        p.particleLifeSpan = 0.7
-        p.particleVelocity = 1.4
-        p.particleVelocityVariation = 0.6
+        p.particleLifeSpan = 0.5
+        p.particleVelocity = 2.6
+        p.particleVelocityVariation = 0.8
         p.emittingDirection = SCNVector3(0, 1, 0)
-        p.spreadingAngle = 25
-        p.particleSize = 0.16
-        p.particleSizeVariation = 0.08
+        p.spreadingAngle = 6
+        p.particleSize = 0.05
+        p.particleSizeVariation = 0.02
         p.particleColor = color
-        p.particleImage = softDot
+        p.particleImage = spark
+        p.orientationMode = .free
+        p.stretchFactor = 0.12
         p.blendMode = .additive
-        p.emitterShape = SCNCylinder(radius: 0.35, height: 1.6)
+        p.emitterShape = SCNCylinder(radius: 0.32, height: 1.4)
         p.birthLocation = .surface
         let fade = CAKeyframeAnimation()
-        fade.values = [0, 1, 0]
-        fade.keyTimes = [0, 0.3, 1]
+        fade.values = [0, 0.9, 0]
+        fade.keyTimes = [0, 0.25, 1]
         p.propertyControllers = [.opacity: SCNParticlePropertyController(animation: fade)]
         return p
     }
