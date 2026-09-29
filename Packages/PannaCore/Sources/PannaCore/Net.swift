@@ -58,6 +58,66 @@ public struct LeaderboardEntry: Codable, Sendable, Identifiable {
     public init(id: String, name: String, rp: Int, wins: Int, losses: Int) { self.id = id; self.name = name; self.rp = rp; self.wins = wins; self.losses = losses }
 }
 
+public struct CrewMember: Codable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var rp: Int
+    public var points: Int
+    public init(id: String, name: String, rp: Int, points: Int) { self.id = id; self.name = name; self.rp = rp; self.points = points }
+}
+
+public struct CrewInfo: Codable, Sendable {
+    public var code: String
+    public var name: String
+    public var tag: String
+    public var points: Int
+    public var rank: Int
+    public var members: [CrewMember]
+    public init(code: String, name: String, tag: String, points: Int, rank: Int, members: [CrewMember]) {
+        self.code = code; self.name = name; self.tag = tag; self.points = points; self.rank = rank; self.members = members
+    }
+}
+
+public struct CrewEntry: Codable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var tag: String
+    public var points: Int
+    public var members: Int
+    public init(id: String, name: String, tag: String, points: Int, members: Int) { self.id = id; self.name = name; self.tag = tag; self.points = points; self.members = members }
+}
+
+public enum CrewTag {
+    static let blocked: Set<String> = ["NIG", "NIGG", "NGR", "NGA", "FAG", "FAGS", "KKK", "NAZI", "NAZ", "SEX", "ASS", "CUM", "FUK", "FCK", "FUCK", "SHIT", "CNT", "CUNT", "DIK", "DICK", "COCK", "PUSY", "RAPE", "HOE", "HOES", "WTF", "JEW", "GAY", "TIT", "TITS", "POO", "PEE", "SPIC", "CHNK", "KIKE"]
+    /// Initials of the crew name (max 4), never an offensive combination.
+    public static func make(from name: String) -> String {
+        let words = name.uppercased().split { !$0.isLetter && !$0.isNumber }
+        var tag = String(words.compactMap { $0.first }.prefix(4))
+        if tag.count < 2, let w = words.first { tag = String(w.prefix(2)) }
+        return sanitize(tag)
+    }
+    public static func sanitize(_ t: String) -> String {
+        let up = String(t.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(4))
+        if up.isEmpty || blocked.contains(up) || blocked.contains(where: { up.contains($0) && $0.count >= 3 }) { return "CRW" }
+        return up
+    }
+}
+
+public enum Moderation {
+    /// Replaces names containing slurs/profanity. Deliberately conservative (whole words for short terms).
+    public static func clean(_ name: String, fallback: String) -> String {
+        let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(18))
+        if trimmed.isEmpty { return fallback }
+        let squashed = trimmed.uppercased().filter { $0.isLetter }
+            .replacingOccurrences(of: "0", with: "O")
+        let words = trimmed.uppercased().split { !$0.isLetter }.map(String.init)
+        for b in CrewTag.blocked {
+            if b.count >= 4 ? squashed.contains(b) : words.contains(b) { return fallback }
+        }
+        return trimmed
+    }
+}
+
 public enum ClientMsg: Codable, Sendable {
     case hello(Hello)
     case queue(OnlineMode)
@@ -68,6 +128,10 @@ public enum ClientMsg: Codable, Sendable {
     case leaveMatch
     case leaderboard
     case ping(Double)
+    case createCrew(name: String, tag: String)
+    case joinCrew(String)
+    case leaveCrew
+    case crew
 }
 
 public struct MatchStartInfo: Codable, Sendable {
@@ -104,6 +168,8 @@ public enum ServerMsg: Codable, Sendable {
     case leaderboard([LeaderboardEntry])
     case error(String)
     case pong(Double)
+    case crew(CrewInfo?)
+    case crewBoard([CrewEntry])
 }
 
 public enum NetCodec {

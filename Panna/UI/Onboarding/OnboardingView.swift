@@ -100,7 +100,7 @@ struct OnboardingView: View {
                     }
                 }
                 GlowButton(title: "THIS IS ME", icon: "checkmark", height: 54) {
-                    store.p.name = name.trimmingCharacters(in: .whitespaces).isEmpty ? "Rookie" : name.trimmingCharacters(in: .whitespaces)
+                    store.p.name = Moderation.clean(name, fallback: "Rookie")
                     store.p.appearance = draft
                     store.p.onboarded = true
                     store.p.gems += 160   // welcome gift: one Scout pack

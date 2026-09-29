@@ -37,13 +37,16 @@ struct OnlineBody: View {
     @ObservedObject var client: OnlineClient
     @Binding var joinCode: String
     @Binding var showServer: Bool
+    @State private var rightTab = 0
+    @State private var crewName = ""
+    @State private var crewCode = ""
 
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 10) {
                 statusLine
                 HStack(spacing: 12) {
-                    modeCard(.ranked, "RANKED 3v3", "Real players. Ranked points. Builds are sidegrades — stats are equal.", "shield.lefthalf.filled", Color(hex: Catalog.tierColors[store.p.tierIndex]))
+                    modeCard(.ranked, "RANKED 3v3", "Real players. Equal stats. Pure skill.", "shield.lefthalf.filled", Color(hex: Catalog.tierColors[store.p.tierIndex]))
                     modeCard(.duel, "DUEL 1v1", "You vs one rival, AI teammates each side.", "person.2.fill", Theme.pink)
                     modeCard(.coop, "CO-OP", "Team up with up to 2 friends vs an AI crew that scales to you.", "person.3.fill", Theme.green)
                 }
@@ -51,10 +54,21 @@ struct OnlineBody: View {
                 Spacer()
             }
             .frame(width: 520)
-            leaderboardPanel
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    tabChip("PLAYERS", 0); tabChip("CREW", 1)
+                }
+                if rightTab == 0 { leaderboardPanel } else { crewPanel }
+            }
         }
         .padding(.top, 56)
         .padding(.leading, 52).padding(.trailing, 22)
+        .onAppear {
+            if let n = ProcessInfo.processInfo.environment["PANNA_CREW"] {
+                rightTab = 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { if client.crew == nil { client.createCrew(name: n, tag: CrewTag.make(from: n)) } }
+            }
+        }
         .overlay {
             if case .queued(let mode) = client.status { queueOverlay(mode) }
         }
@@ -181,6 +195,66 @@ struct OnlineBody: View {
         .padding(12)
         .frame(width: 260, height: 300)
         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel.opacity(0.9)))
+    }
+
+    func tabChip(_ t: String, _ i: Int) -> some View {
+        Button { rightTab = i } label: {
+            Text(t).font(.label(11, .black)).foregroundStyle(rightTab == i ? .black : .white)
+                .padding(.horizontal, 14).padding(.vertical, 5)
+                .background(Capsule().fill(rightTab == i ? Theme.cyan : Theme.panel))
+        }
+    }
+
+    var crewPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let c = client.crew {
+                HStack {
+                    Text("[\(c.tag)] \(c.name)").font(.display(16)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
+                    Spacer()
+                    Text("#\(c.rank)").font(.display(16)).foregroundStyle(Theme.gold)
+                }
+                Text("CODE \(c.code) · \(c.points) PTS THIS WEEK").font(.label(10, .black)).foregroundStyle(Theme.cyan)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 3) {
+                        ForEach(c.members) { m in
+                            HStack {
+                                Text(m.name).font(.label(12, .black)).foregroundStyle(m.id == store.p.id ? Theme.green : .white).lineLimit(1)
+                                Spacer()
+                                Text("\(m.points) pts").font(.label(11)).foregroundStyle(.white.opacity(0.7))
+                            }
+                        }
+                        Divider().overlay(.white.opacity(0.15)).padding(.vertical, 4)
+                        Text("CREW RANKINGS").font(.label(10, .black)).foregroundStyle(.white.opacity(0.6)).frame(maxWidth: .infinity, alignment: .leading)
+                        ForEach(Array(client.crewBoard.prefix(10).enumerated()), id: \.element.id) { i, e in
+                            HStack {
+                                Text("\(i + 1). [\(e.tag)] \(e.name)").font(.label(11, .black)).foregroundStyle(e.id == c.code ? Theme.gold : .white).lineLimit(1)
+                                Spacer()
+                                Text("\(e.points)").font(.label(11)).foregroundStyle(.white.opacity(0.7))
+                            }
+                        }
+                    }
+                }
+                Button("Leave crew") { client.leaveCrew() }.font(.label(10, .black)).foregroundStyle(.white.opacity(0.4))
+            } else {
+                Text("CREWS").font(.display(16)).foregroundStyle(.white)
+                Text("Play online with your crew. Every match earns crew points; crews climb a weekly table.").font(.label(10)).foregroundStyle(.white.opacity(0.7))
+                TextField("", text: $crewName, prompt: Text("CREW NAME").foregroundStyle(.white.opacity(0.3)))
+                    .font(.label(13, .black)).foregroundStyle(.white).padding(7).background(RoundedRectangle(cornerRadius: 6).fill(Theme.panel2))
+                Button("CREATE CREW") { let n = crewName.isEmpty ? store.p.name + "'s Crew" : crewName; client.createCrew(name: n, tag: CrewTag.make(from: n)) }
+                    .font(.label(12, .black)).foregroundStyle(.black).padding(.horizontal, 12).padding(.vertical, 6).background(Capsule().fill(Theme.cyan))
+                HStack {
+                    TextField("", text: $crewCode, prompt: Text("CODE").foregroundStyle(.white.opacity(0.3)))
+                        .font(.label(13, .black)).foregroundStyle(.white).textInputAutocapitalization(.characters)
+                        .padding(7).background(RoundedRectangle(cornerRadius: 6).fill(Theme.panel2))
+                    Button("JOIN") { client.joinCrew(crewCode) }.font(.label(12, .black)).foregroundStyle(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 6).background(Capsule().fill(.white.opacity(0.15)))
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 260, height: 300, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel.opacity(0.9)))
+        .opacity(client.status == .offline ? 0.5 : 1)
     }
 
     func rankName(_ rp: Int) -> String {

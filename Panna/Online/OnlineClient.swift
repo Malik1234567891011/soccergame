@@ -81,6 +81,8 @@ final class OnlineClient: NSObject, ObservableObject, URLSessionWebSocketDelegat
     @Published var humansInQueue = 0
     @Published var room: (code: String, members: [String], host: Bool)? = nil
     @Published var leaderboard: [LeaderboardEntry] = []
+    @Published var crew: CrewInfo?
+    @Published var crewBoard: [CrewEntry] = []
     @Published var error: String?
     @AppStorage("serverURL") var serverURL: String = OnlineClient.defaultURL
     var onMatchStart: ((MatchStartInfo) -> Void)?
@@ -134,7 +136,10 @@ final class OnlineClient: NSObject, ObservableObject, URLSessionWebSocketDelegat
     func createRoom() { send(.createRoom) }
     func joinRoom(_ code: String) { send(.joinRoom(code)) }
     func startRoom() { send(.startRoom) }
-    func refreshLeaderboard() { send(.leaderboard) }
+    func refreshLeaderboard() { send(.leaderboard); send(.crew) }
+    func createCrew(name: String, tag: String) { send(.createCrew(name: name, tag: tag)) }
+    func joinCrew(_ code: String) { send(.joinCrew(code)) }
+    func leaveCrew() { send(.leaveCrew) }
 
     private func receive() {
         task?.receive { [weak self] result in
@@ -190,6 +195,10 @@ final class OnlineClient: NSObject, ObservableObject, URLSessionWebSocketDelegat
             error = e
         case .pong:
             break
+        case .crew(let c):
+            crew = c
+        case .crewBoard(let b):
+            crewBoard = b
         }
     }
 

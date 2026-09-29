@@ -130,7 +130,7 @@ struct LockerView: View {
                     .font(.display(20)).foregroundStyle(.white)
                     .padding(.horizontal, 12).frame(width: 240, height: 42)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-                    .onSubmit { store.save(); refresh() }
+                    .onSubmit { store.p.name = Moderation.clean(store.p.name, fallback: "Rookie"); store.save(); refresh() }
             }
             if draft.look == nil {
             section("SKIN TONE") {

@@ -14,6 +14,62 @@ struct PlayerRecord: Codable {
     var mmr: Double
     var wins: Int
     var losses: Int
+    var crew: String?
+    var crewPoints: Int?
+}
+
+struct CrewRecord: Codable {
+    var code: String
+    var name: String
+    var tag: String
+    var members: [String]
+    var points: Int
+    var weekStart: Double
+}
+
+final class CrewStore {
+    private(set) var crews: [String: CrewRecord] = [:]
+    let url: URL
+    init() {
+        let dir = ProcessInfo.processInfo.environment["DATA_DIR"] ?? "./data"
+        url = URL(fileURLWithPath: dir).appendingPathComponent("crews.json")
+        if let d = try? Data(contentsOf: url), let c = try? JSONDecoder().decode([String: CrewRecord].self, from: d) { crews = c }
+    }
+    func save() { if let d = try? JSONEncoder().encode(crews) { try? d.write(to: url, options: .atomic) } }
+    func weekly(_ code: String) -> CrewRecord? {
+        guard var c = crews[code] else { return nil }
+        if Date().timeIntervalSince1970 - c.weekStart > 7 * 86400 { c.points = 0; c.weekStart = Date().timeIntervalSince1970; crews[code] = c }
+        return c
+    }
+    func create(name: String, tag: String, owner: String) -> CrewRecord {
+        var code = ""
+        repeat { code = String((0..<5).map { _ in "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".randomElement()! }) } while crews[code] != nil
+        let c = CrewRecord(code: code, name: Moderation.clean(name, fallback: "Crew \(code)"), tag: CrewTag.sanitize(tag), members: [owner], points: 0, weekStart: Date().timeIntervalSince1970)
+        crews[code] = c
+        save()
+        return c
+    }
+    func add(_ code: String, _ id: String) -> Bool {
+        guard var c = crews[code], c.members.count < 20 else { return false }
+        if !c.members.contains(id) { c.members.append(id) }
+        crews[code] = c; save(); return true
+    }
+    func remove(_ code: String, _ id: String) {
+        guard var c = crews[code] else { return }
+        c.members.removeAll { $0 == id }
+        if c.members.isEmpty { crews[code] = nil } else { crews[code] = c }
+        save()
+    }
+    func award(_ code: String, _ pts: Int) {
+        guard var c = weekly(code) else { return }
+        c.points += pts
+        crews[code] = c
+        save()
+    }
+    func board() -> [CrewEntry] {
+        crews.values.map { c in CrewEntry(id: c.code, name: c.name, tag: c.tag, points: weekly(c.code)?.points ?? 0, members: c.members.count) }
+            .sorted { $0.points > $1.points }.prefix(30).map { $0 }
+    }
 }
 
 final class PlayerStore {
@@ -197,6 +253,11 @@ final class ServerMatch {
                     after = r.rp
                 }
             }
+            if let code = mm?.store.records[pid]?.crew {
+                let pts = won ? 3 : 1
+                mm?.crews.award(code, pts)
+                mm?.store.update(pid) { $0.crewPoints = ($0.crewPoints ?? 0) + pts }
+            }
             s.send(.matchEnd(MatchEndInfo(score: st.score, winner: st.winner, yourTeam: team, rpBefore: before, rpAfter: after, ranked: ranked)))
             s.match = nil
             s.slot = -1
@@ -210,6 +271,16 @@ final class ServerMatch {
 
 final class Matchmaker {
     let store = PlayerStore()
+    let crews = CrewStore()
+
+    func crewInfo(for pid: String) -> CrewInfo? {
+        guard let code = store.records[pid]?.crew, let c = crews.weekly(code) else { return nil }
+        let board = crews.board()
+        let rank = (board.firstIndex { $0.id == code } ?? board.count) + 1
+        let members = c.members.compactMap { store.records[$0] }.map { CrewMember(id: $0.id, name: $0.name, rp: $0.rp, points: $0.crewPoints ?? 0) }
+            .sorted { $0.points > $1.points }
+        return CrewInfo(code: c.code, name: c.name, tag: c.tag, points: c.points, rank: rank, members: members)
+    }
     var sessions: [UUID: Session] = [:]
     var rooms: [String: Room] = [:]
     var matches: [String: ServerMatch] = [:]
@@ -246,11 +317,13 @@ final class Matchmaker {
     func handle(_ s: Session, _ text: String) {
         guard let msg = NetCodec.decode(ClientMsg.self, text) else { s.send(.error("bad message")); return }
         switch msg {
-        case .hello(let h):
+        case .hello(var h):
+            h.name = Moderation.clean(h.name, fallback: "Player\(Int.random(in: 100...999))")
             s.hello = h
             let r = store.upsert(h)
             store.flush()
             s.send(.welcome(rp: r.rp, online: sessions.count))
+            s.send(.crew(crewInfo(for: h.playerId)))
         case .queue(let mode):
             guard s.hello != nil, s.match == nil else { return }
             s.queue = mode
@@ -288,6 +361,34 @@ final class Matchmaker {
             s.send(.leaderboard(store.top(50)))
         case .ping(let t):
             s.send(.pong(t))
+        case .createCrew(let name, let tag):
+            guard let pid = s.hello?.playerId else { return }
+            if let old = store.records[pid]?.crew { crews.remove(old, pid) }
+            let c = crews.create(name: name, tag: tag, owner: pid)
+            store.update(pid) { $0.crew = c.code; $0.crewPoints = 0 }
+            store.flush()
+            s.send(.crew(crewInfo(for: pid)))
+            s.send(.crewBoard(crews.board()))
+        case .joinCrew(let code):
+            guard let pid = s.hello?.playerId else { return }
+            let c = code.uppercased()
+            if let old = store.records[pid]?.crew, old != c { crews.remove(old, pid) }
+            if crews.add(c, pid) {
+                store.update(pid) { $0.crew = c; $0.crewPoints = 0 }
+                store.flush()
+                s.send(.crew(crewInfo(for: pid)))
+                s.send(.crewBoard(crews.board()))
+            } else { s.send(.error("Crew \(c) not found or full")) }
+        case .leaveCrew:
+            guard let pid = s.hello?.playerId, let old = store.records[pid]?.crew else { return }
+            crews.remove(old, pid)
+            store.update(pid) { $0.crew = nil }
+            store.flush()
+            s.send(.crew(nil))
+        case .crew:
+            guard let pid = s.hello?.playerId else { return }
+            s.send(.crew(crewInfo(for: pid)))
+            s.send(.crewBoard(crews.board()))
         }
     }
 
