@@ -77,7 +77,7 @@ for v in obj.data.vertices:
     w = wz * wx * wn
     if w > 0.01: fw[v.index] = w
 co = [v.co.copy() for v in obj.data.vertices]
-for _ in range(10):
+for _ in range(22):
     nc = list(co)
     for i, w in fw.items():
         if nbr[i]:
@@ -341,6 +341,7 @@ def register_vertical(key):
     views[key] = (img, (w, h, l, r, tt, nb), mask)
 
 head_map = {}
+head_cost = {}
 def register_head(key, z0f=0.845):
     """Heads rarely match the drawing's proportions: fit a separate x/z affine map for the head band by
     matching the head silhouette (row extents) of the image to the mesh."""
@@ -381,7 +382,7 @@ def register_head(key, z0f=0.845):
             if best is None or cost < best[0]: best = (cost, Am, Bm, C, D, sz, off)
     if best is None or os.environ.get('NO_HEADFIT'): return
     cost, A, B, C, D, sz, off = best
-    head_map[key] = (float(A), float(B), float(C), float(D))
+    head_map[key] = (float(A), float(B), float(C), float(D)); head_cost[key] = float(cost)
     print('HEAD REGISTER', key, 'xscale', round(B / (sign * ppm), 3), 'zscale', round(sz, 3), 'zoff', round(off, 3), 'cost', round(cost, 2))
 
 def facing(mask, h, top, bottom):
@@ -576,6 +577,11 @@ for k in ('front', 'back'):
     if k in views: register_vertical(k); register_head(k)
 for k in ('left', 'right'):
     if k in views: register_head(k)   # profiles only paint the head: fit them to the mesh's head profile
+# A profile whose head silhouette doesn't fit the mesh paints ghost eyes/ears: better to leave it out.
+for k in ('left', 'right'):
+    if k in views and head_cost.get(k, 0) > 16:
+        print('UNIQUE dropping', k, 'view (head fit cost', round(head_cost[k], 1), ')')
+        del views[k]
 
 # ---- vertex colours: sample front/back where confidently seen, flood-fill the rest across the mesh.
 def t_of(view): return view[1][4]
@@ -944,7 +950,9 @@ for v in obj.data.vertices:
     hhead = sum(g.weight for g in v.groups if gname.get(g.group) == 'head') / tot
     headish = min(1.0, max(0.0, (hhead - 0.5) / 0.3))   # the head bone only: neck weights bleed onto the chest
     if zf < 0.79: val = max(val, 1.0 - headish)
-    elif zf < 0.81: val = max(val, (0.81 - zf) / 0.02 * (1.0 - headish))
+    elif zf < 0.845:   # collar band (short necks): only where the head bone has (almost) no say — never a chin or open mouth
+        strict = 1.0 - min(1.0, max(0.0, (hhead - 0.12) / 0.2))
+        val = max(val, min(1.0, (0.845 - zf) / 0.015) * strict)
     if v.co.z > neck_z: val = 0.0
     elif v.co.z > neck_z - 0.02 * H: val *= (neck_z - v.co.z) / (0.02 * H)
     km.data[v.index].color = (val, val, val, 1)
