@@ -19,6 +19,7 @@ final class MatchRenderer {
     var playerNodes: [SCNNode] = []
     var rings: [SCNNode] = []
     let ballNode = SCNNode()
+    let exposureRing = SCNNode()
     let ballVisual = SCNNode()
     let ballShadow = SCNNode()
     let landingMarker = SCNNode()
@@ -179,6 +180,14 @@ final class MatchRenderer {
         ballNode.addChildNode(ballVisual)
         ballNode.addParticleSystem(trail)
         scene.rootNode.addChildNode(ballNode)
+        let er = SCNPlane(width: 0.9, height: 0.9)
+        let erm = SCNMaterial(); erm.diffuse.contents = FX.ring; erm.multiply.contents = UIColor(hex: 0xFF8A3B)
+        erm.lightingModel = .constant; erm.blendMode = .add; erm.writesToDepthBuffer = false; erm.isDoubleSided = true
+        er.materials = [erm]
+        exposureRing.geometry = er
+        exposureRing.eulerAngles.x = -.pi / 2
+        exposureRing.opacity = 0
+        scene.rootNode.addChildNode(exposureRing)
         // Blob shadow — essential for reading ball height.
         let sh = SCNPlane(width: 0.7, height: 0.7)
         let sm = SCNMaterial()
@@ -325,6 +334,16 @@ final class MatchRenderer {
         let sa = b.spinAngle
         ballVisual.eulerAngles = SCNVector3(sa.x, 0, sa.z)
         ballShadow.position = SCNVector3(bp.x, 0.015, bp.z)
+        // Readability: a carried ball that has run away from the feet glows orange — the moment to tackle.
+        var exposure: Float = 0
+        if b.owner >= 0, b.owner < s.players.count {
+            let o = s.players[b.owner].pos
+            let d = PannaCore.length(V2(bp.x - o.x, bp.z - o.y))
+            exposure = min(1, max(0, (d - 0.75) / 0.5))
+        }
+        exposureRing.position = SCNVector3(bp.x, 0.03, bp.z)
+        exposureRing.opacity += (CGFloat(exposure) - exposureRing.opacity) * 0.3
+        exposureRing.scale = SCNVector3(1 + sin(time * 12) * 0.08, 1, 1 + sin(time * 12) * 0.08)
         let hgt = max(0, bp.y - BallState.radius)
         let ss = 1 + hgt * 0.35
         ballShadow.scale = SCNVector3(ss, ss, ss)
@@ -433,6 +452,7 @@ final class MatchRenderer {
             if perfect {
                 let b = s.ball.pos
                 spawn(FX.burst(color: UIColor(hex: 0x39FF88), count: 400, speed: 7, life: 0.5, size: 0.18), at: SCNVector3(b.x, b.y, b.z))
+                shockRing(color: UIColor(hex: 0x39FF88), at: SCNVector3(b.x, 0.05, b.z))   // unmistakable "you timed it" tell
                 fovPunch = 5
             }
         case .goal(let team, _, _, _):
