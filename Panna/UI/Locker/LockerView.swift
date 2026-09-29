@@ -111,12 +111,21 @@ struct LockerView: View {
             if !Catalog.looks.isEmpty {
                 section("FOOTBALLER") {
                     ForEach(Catalog.looks, id: \.self) { id in
-                        Button { set { $0.look = id } } label: {
-                            Group {
-                                if let img = Art.image("look_" + id) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray }
+                        let cid = "look.\(id)"
+                        let owned = store.p.owns(cid)
+                        let rarity = Cosmetics.item(cid)?.rarity ?? .common
+                        Button { pick(cid) { $0.look = id } } label: {
+                            ZStack {
+                                Group {
+                                    if let img = Art.image("look_" + id) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray }
+                                }
+                                .frame(width: 58, height: 58).clipShape(RoundedRectangle(cornerRadius: 10))
+                                .saturation(owned ? 1 : 0.35).brightness(owned ? 0 : -0.15)
+                                if !owned {
+                                    Image(systemName: "lock.fill").font(.system(size: 13, weight: .black)).foregroundStyle(.white).shadow(radius: 3)
+                                }
                             }
-                            .frame(width: 58, height: 58).clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(draft.look == id ? Theme.green : .white.opacity(0.15), lineWidth: draft.look == id ? 3 : 1))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(draft.look == id ? Theme.green : (rarity > .common ? rarity.color.opacity(0.9) : .white.opacity(0.15)), lineWidth: draft.look == id ? 3 : (rarity > .common ? 2 : 1)))
                         }
                         .buttonStyle(PressStyle())
                     }
@@ -226,6 +235,12 @@ struct LockerView: View {
                 ForEach(Sleeves.allCases, id: \.self) { s in chip(s.rawValue.uppercased(), draft.sleeves == s) { set { $0.sleeves = s } } }
             }
             }
+            section("FLOW TRAIL") {
+                ForEach(Cosmetics.items.filter { $0.category == .trail }) { it in
+                    let c = UInt32(it.id.dropFirst(6), radix: 16) ?? 0
+                    swatch(Color(hex: c), selected: draft.trail == c, locked: !store.p.owns(it.id)) { pick(it.id) { $0.trail = c } }
+                }
+            }
             section("NUMBER") {
                 Stepper(value: Binding(get: { draft.number }, set: { n in set { $0.number = n } }), in: 1...99) {
                     Text("#\(draft.number)").font(.display(24)).foregroundStyle(.white)
@@ -312,6 +327,11 @@ struct LockerView: View {
             Color.black.opacity(0.7).ignoresSafeArea().onTapGesture { buying = nil }
             VStack(spacing: 12) {
                 RarityBadge(rarity: item.rarity)
+                if item.category == .look, let img = Art.image("look_" + item.id.dropFirst(5)) {
+                    Image(uiImage: img).resizable().scaledToFill().frame(width: 150, height: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(item.rarity.color, lineWidth: 2))
+                }
                 Text(item.name).font(.display(28)).foregroundStyle(.white)
                 Text("Unlock for your locker").font(.label(13)).foregroundStyle(.white.opacity(0.7))
                 GlowButton(title: "\(item.price)", icon: "circle.hexagongrid.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 54) {

@@ -3,7 +3,7 @@ import PannaCore
 
 // MARK: - Cosmetics
 
-enum CosmeticCategory: String, Codable, CaseIterable { case hair, hairColor, pattern, boots, bootColor, headwear, accessory, trail }
+enum CosmeticCategory: String, Codable, CaseIterable { case hair, hairColor, pattern, boots, bootColor, headwear, accessory, trail, look }
 
 struct CosmeticItem: Identifiable, Hashable {
     let id: String
@@ -40,12 +40,30 @@ enum Cosmetics {
         for a in Accessory.allCases {
             out.append(CosmeticItem(id: "acc.\(a.rawValue)", name: a.rawValue.uppercased(), category: .accessory, rarity: accs[a] ?? .common))
         }
+        // Painted footballers: the collectible looks. Hair/boots/headwear are painted into each one.
+        for id in Catalog.looks {
+            out.append(CosmeticItem(id: "look.\(id)", name: lookNames[id] ?? id.uppercased(), category: .look, rarity: lookRarity[id] ?? .rare))
+        }
         let trails: [(UInt32, Rarity)] = [(0x39FF88, .common), (0xFF3B5C, .common), (0x3BE8FF, .common), (0xFFD23B, .rare), (0xB26BFF, .rare), (0xFF3BD4, .epic), (0xFFFFFF, .legendary)]
         for (c, r) in trails {
-            out.append(CosmeticItem(id: String(format: "trail.%06X", c), name: "TRAIL", category: .trail, rarity: r))
+            let names: [UInt32: String] = [0x39FF88: "MINT", 0xFF3B5C: "CHERRY", 0x3BE8FF: "ICE", 0xFFD23B: "GOLD", 0xB26BFF: "VIOLET", 0xFF3BD4: "NEON", 0xFFFFFF: "HALO"]
+            out.append(CosmeticItem(id: String(format: "trail.%06X", c), name: (names[c] ?? "") + " TRAIL", category: .trail, rarity: r))
         }
         return out
     }()
+
+    static let lookNames: [String: String] = [
+        "l01": "SPARK", "l02": "DRIFT", "l03": "PIXIE", "l04": "GOLDIE", "l05": "INK", "l06": "CURLS", "l07": "BRAIDS", "l08": "BUNS",
+        "l09": "SILVER", "l10": "TANK", "l11": "SAKURA", "l12": "STORM", "l13": "SENSEI", "l14": "SUNNY", "l15": "VOLT", "l16": "NOOR",
+    ]
+    static let lookRarity: [String: Rarity] = [
+        "l01": .common, "l02": .common, "l03": .common, "l05": .common, "l13": .common, "l16": .common,
+        "l04": .rare, "l06": .rare, "l07": .rare, "l08": .rare, "l12": .rare,
+        "l09": .epic, "l10": .epic, "l15": .epic,
+        "l11": .legendary, "l14": .legendary,
+    ]
+    /// What the shop and pass can offer: things you can actually see on a painted footballer.
+    static let sellable: Set<CosmeticCategory> = [.look, .trail]
 
     static func item(_ id: String) -> CosmeticItem? { items.first { $0.id == id } }
     static var defaults: Set<String> { Set(items.filter { $0.rarity == .common }.map { $0.id }) }
@@ -233,6 +251,9 @@ final class ProfileStore: ObservableObject {
             p.appearance.look = first
             p.lookMigrated = true
         }
+        // Free looks for everyone; whoever you already play as stays yours.
+        p.unlocked.formUnion(Cosmetics.defaults)
+        if let l = p.appearance.look { p.unlocked.insert("look.\(l)") }
         refreshDaily()
     }
 
@@ -287,10 +308,11 @@ final class ProfileStore: ObservableObject {
             }
             p.quests = qs
         }
-        if p.shopDay != day {
+        let staleStock = p.shop.contains { id in Cosmetics.item(id).map { !Cosmetics.sellable.contains($0.category) } ?? true }
+        if p.shopDay != day || staleStock {
             p.shopDay = day
             var r = Rng(seed: ProfileStore.stableSeed(day) + 91)
-            let pool = Cosmetics.items.filter { $0.rarity != .common }
+            let pool = Cosmetics.items.filter { $0.rarity != .common && Cosmetics.sellable.contains($0.category) && !p.owns($0.id) }
             var picks: [String] = []
             while picks.count < 4 && picks.count < pool.count {
                 let it = pool[r.int(pool.count)]

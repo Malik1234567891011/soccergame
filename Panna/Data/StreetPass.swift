@@ -39,7 +39,7 @@ enum StreetPass {
 
     /// Premium track: pays back more gems than it costs, plus cosmetics. Never gameplay power.
     static func premiumReward(_ tier: Int) -> Reward {
-        if tier % 10 == 0 { return .cosmetic(["head.durag", "acc.goggles", "boots.highTop", "trail.FF3BD4"][tier / 10 - 1]) }
+        if tier % 10 == 0 { return .cosmetic(["look.l09", "look.l15", "look.l14", "trail.FF3BD4"][tier / 10 - 1]) }
         if tier % 5 == 0 { return .pack }
         if tier % 2 == 0 { return .gems(40) }
         return .shards(30)
@@ -47,7 +47,7 @@ enum StreetPass {
 
     static func reward(_ tier: Int) -> Reward {
         if tier == tiers { return .cosmetic("trail.FFFFFF") }
-        if tier % 10 == 0 { return .cosmetic(["boots.glow", "acc.mask", "pattern.checker"][tier / 10 - 1]) }
+        if tier % 10 == 0 { return .cosmetic(["look.l06", "look.l12", "look.l10"][tier / 10 - 1]) }
         if tier % 5 == 0 { return .pack }
         if tier % 4 == 0 { return .gems(60) }
         if tier % 3 == 0 { return .shards(40) }

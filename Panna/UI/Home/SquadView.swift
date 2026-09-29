@@ -343,7 +343,7 @@ struct ShopView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         StreetPassView()
                         HStack {
-                            Text(store.p.passPremium ? "PREMIUM ACTIVE" : "PREMIUM TRACK: exclusive durag, goggles, high-tops, neon trail + gems").font(.label(11, .black)).foregroundStyle(Theme.gold)
+                            Text(store.p.passPremium ? "PREMIUM ACTIVE" : "PREMIUM TRACK: exclusive footballers SILVER, VOLT & SUNNY, a neon trail + gems").font(.label(11, .black)).foregroundStyle(Theme.gold)
                             Spacer()
                             if !store.p.passPremium, let pp = shop.products.first(where: { $0.id == Shop.passID }) {
                                 GlowButton(title: "UNLOCK " + pp.displayPrice, icon: "crown.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 42) { Task { await shop.buy(pp) } }
@@ -398,9 +398,17 @@ struct ShopView: View {
         let owned = store.p.owns(it.id)
         return VStack(alignment: .leading, spacing: 6) {
             RarityBadge(rarity: it.rarity)
-            Image(systemName: icon(it.category)).font(.system(size: 40, weight: .bold)).foregroundStyle(it.rarity.color).frame(maxWidth: .infinity).padding(.vertical, 10)
+            if it.category == .look, let img = Art.image("look_" + it.id.dropFirst(5)) {
+                Image(uiImage: img).resizable().scaledToFill()
+                    .frame(maxWidth: .infinity).frame(height: 84).clipShape(RoundedRectangle(cornerRadius: 10))
+            } else if it.category == .trail {
+                Capsule().fill(LinearGradient(colors: [.clear, Color(hex: UInt32(it.id.dropFirst(6), radix: 16) ?? 0)], startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 16).frame(maxWidth: .infinity).padding(.vertical, 34)
+            } else {
+                Image(systemName: icon(it.category)).font(.system(size: 40, weight: .bold)).foregroundStyle(it.rarity.color).frame(maxWidth: .infinity).padding(.vertical, 10)
+            }
             Text(it.name).font(.display(18)).foregroundStyle(.white)
-            Text(it.category.rawValue.uppercased()).font(.label(10, .black)).foregroundStyle(.white.opacity(0.5))
+            Text(it.category == .look ? "FOOTBALLER" : (it.category == .trail ? "FLOW TRAIL" : it.category.rawValue.uppercased())).font(.label(10, .black)).foregroundStyle(.white.opacity(0.5))
             Button {
                 if store.buy(it) { AudioEngine.shared.play(.reward) } else { AudioEngine.shared.play(.uiBack) }
             } label: {
@@ -424,6 +432,7 @@ struct ShopView: View {
         case .headwear: return "graduationcap.fill"
         case .accessory: return "eyeglasses"
         case .trail: return "wind"
+        case .look: return "person.fill"
         }
     }
 }
