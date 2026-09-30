@@ -309,6 +309,12 @@ final class ProfileStore: ObservableObject {
             if (p.prospects["luna"] ?? 0) == 0 { p.prospects["luna"] = 1 }
             if !p.squad.contains("luna") { p.squad = Array((["luna"] + p.squad).prefix(2)) }
         }
+        #if UNLOCK_ALL
+        // Showcase build (UNLOCK_ALL compile flag): every footballer, cosmetic, prospect and card owned.
+        p.unlocked.formUnion(Cosmetics.items.map { $0.id })
+        for pr in Catalog.prospects where (p.prospects[pr.id] ?? 0) == 0 { p.prospects[pr.id] = 1 }
+        for c in Catalog.legacies where (p.legacies[c.id] ?? 0) == 0 { p.legacies[c.id] = 1 }
+        #endif
         // Free looks for everyone; whoever you already play as stays yours.
         p.unlocked.formUnion(Cosmetics.defaults)
         if let l = p.appearance.look { p.unlocked.insert("look.\(l)") }

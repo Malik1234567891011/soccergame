@@ -849,6 +849,33 @@ if '--stress' in A:
 
 # ------------------------------------------------------------------ kit region mask = clothing zone (skeleton) × cloth colour (texture)
 gname = {g.index: g.name for g in obj.vertex_groups}
+# ---- Neck / inside the V: Tripo often paints jersey colour onto skin above the collar. Find those vertices in 3D:
+# kit-coloured and ABOVE the yellow collar trim at the same x (front or back side), so the V-neck itself is respected.
+_nv = len(obj.data.vertices)
+_uvd = obj.data.uv_layers.active.data; _vuv = np.zeros((_nv, 2))
+for l_ in obj.data.loops: _vuv[l_.vertex_index] = _uvd[l_.index].uv
+_th, _tw = tex_srgb.shape[:2]
+_vpx = tex_srgb[np.clip((_vuv[:, 1] * _th).astype(int), 0, _th - 1), np.clip((_vuv[:, 0] * _tw).astype(int), 0, _tw - 1)]
+_vmx = _vpx.max(1); _vmn = _vpx.min(1); _vsat = (_vmx - _vmn) / np.maximum(_vmx, 1e-6)
+_vh = np.array([colorsys.rgb_to_hsv(*c)[0] for c in _vpx])
+def _vhd(h0): d_ = np.abs(_vh - h0); return np.minimum(d_, 1 - d_)
+V_ = np.array([v.co[:] for v in obj.data.vertices])
+_redv = (np.minimum(_vhd(0.0), _vhd(_shirt_h)) < 0.06) & (_vsat > 0.35)
+_kitv = (_vmx > 0.12) & (_redv | ((_vsat > 0.3) & ((_vhd(0.62) < 0.08) | (_vhd(0.37) < 0.08))))
+_trimv = (_vsat > 0.35) & (_vmx > 0.35) & (_vhd(0.13) < 0.06) & (V_[:, 2] > Zf(0.7)) & (V_[:, 2] < Zf(0.9)) & (np.abs(V_[:, 0]) < 0.085 * H)   # collar only, never the sleeve cuffs
+_nk = (V_[:, 2] > Zf(0.84)) & (V_[:, 2] < Zf(0.87)) & (np.abs(V_[:, 0]) < 0.05 * H)
+_ny = float(np.median(V_[_nk, 1])) if _nk.any() else 0.0
+neckv = np.zeros(_nv, bool)
+_al = arm_label if len(arm_label) == _nv else np.zeros(_nv, np.int8)
+if _trimv.sum() > 20:
+    Tp = V_[_trimv]; Tfront = Tp[:, 1] < _ny
+    for i in np.where(_kitv & (np.abs(V_[:, 0]) < 0.11 * H) & (V_[:, 2] > Zf(0.64)) & (V_[:, 2] < Zf(0.93)) & (_al == 0))[0]:
+        x, y, z = V_[i]
+        sel = (np.abs(Tp[:, 0] - x) < 0.012 * H) & (Tfront == (y < _ny))
+        if sel.any() and z > Tp[sel, 2].max() + 0.004 * H: neckv[i] = True
+_sk = (~_kitv) & (np.abs(V_[:, 0]) < 0.05 * H) & (V_[:, 2] > Zf(0.83)) & (V_[:, 2] < Zf(0.88)) & (V_[:, 1] < _ny) & (_vmx > 0.08)
+neck_skin = np.median(_vpx[_sk], axis=0) if _sk.sum() > 5 else None
+print('TRIPO neck-skin vertices', int(neckv.sum()), 'skin', None if neck_skin is None else np.round(neck_skin, 2))
 km = obj.data.color_attributes.new(name='kitmask', type='FLOAT_COLOR', domain='POINT')
 for v in obj.data.vertices:
     tot = sum(g.weight for g in v.groups) or 1
@@ -857,7 +884,8 @@ for v in obj.data.vertices:
     if v.co.z > Zf(0.86): val = 0.0
     aw = sum(g.weight for g in v.groups if gname.get(g.group, '').startswith(('upperarm', 'forearm', 'hand'))) / tot
     shirt = 1.0 if (Zf(0.52) < v.co.z < Zf(0.80) and aw < 0.3) else 0.0   # torso: where A-pose arms hid the paint
-    km.data[v.index].color = (val, shirt, val, 1)
+    nw = sum(g.weight for g in v.groups if gname.get(g.group) in ('neck', 'head')) / tot
+    km.data[v.index].color = (val, shirt, nw, 1)
 mm = bpy.data.materials.new('maskbake'); mm.use_nodes = True
 mt = mm.node_tree; mt.nodes.clear()
 mo = mt.nodes.new('ShaderNodeOutputMaterial'); me_ = mt.nodes.new('ShaderNodeEmission'); vcn = mt.nodes.new('ShaderNodeVertexColor'); vcn.layer_name = 'kitmask'
@@ -871,6 +899,42 @@ bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.
 scene.render.bake.margin = 8
 bpy.ops.object.bake(type='EMIT')
 _zp = np.array(zimg.pixels[:], dtype=np.float32).reshape(T, T, 4); zone = _zp[:, :, 0]; shirtz = _zp[:, :, 1] > 0.5
+neckW = _zp[:, :, 2]
+# coverage: which texels belong to any UV island (margin 0) — mask growth may only fill empty space, never
+# spill into a neighbouring face/eye/hair island
+cv = obj.data.color_attributes.new(name='cov', type='FLOAT_COLOR', domain='POINT')
+for i_ in range(len(cv.data)): cv.data[i_].color = (1, 1, 1, 1)
+vcn.layer_name = 'cov'
+cimg = bpy.data.images.new('cov', T, T, alpha=False); zn.image = cimg
+scene.render.bake.margin = 0
+bpy.ops.object.bake(type='EMIT')
+cover = np.array(cimg.pixels[:], dtype=np.float32).reshape(T, T, 4)[:, :, 0] > 0.5
+# per-texel 3D position (object space) — lets texture fixes be decided on the body, not across UV islands
+tcn = mt.nodes.new('ShaderNodeTexCoord')
+mt.links.new(tcn.outputs['Object'], me_.inputs['Color'])
+pimg = bpy.data.images.new('pos', T, T, alpha=False, float_buffer=True); zn.image = pimg
+bpy.ops.object.bake(type='EMIT')
+P3 = np.array(pimg.pixels[:], dtype=np.float32).reshape(T, T, 4)[:, :, :3]
+# texels physically above the collar trim (same x, same side), inside the collar's own width = neck skin zone
+above_collar = np.zeros((T, T), bool)
+if _trimv.sum() > 20:
+    px, py, pz = P3[:, :, 0], P3[:, :, 1], P3[:, :, 2]
+    for side in (True, False):
+        tp = Tp[Tfront == side]
+        if len(tp) < 8: continue
+        xw = float(np.percentile(np.abs(tp[:, 0]), 95))
+        bins = np.linspace(-xw, xw, 31); top = np.full(len(bins), np.nan)
+        for k_, bx in enumerate(bins):
+            sel = np.abs(tp[:, 0] - bx) < 0.012 * H
+            if sel.any(): top[k_] = tp[sel, 2].max()
+        ok_ = ~np.isnan(top)
+        if ok_.sum() < 4: continue
+        coll = np.interp(bins, bins[ok_], top[ok_])
+        sm = cover & ((py < _ny) == side) & (np.abs(px) < xw + 0.004 * H) & (pz < Zf(0.855))   # neck only: below the chin, never hair
+        idx = np.where(sm)
+        hit = pz[sm] > np.interp(px[sm], bins, coll) + 0.004 * H
+        above_collar[idx[0][hit], idx[1][hit]] = True
+print('TRIPO above-collar texels', int(above_collar.sum()))
 obj.data.materials.clear()
 for m_ in saved: obj.data.materials.append(m_)
 
@@ -919,7 +983,7 @@ trim = np.zeros_like(cloth)
 if cal['yellow']: trim = ok & (hdist(cal['yellow'][0] % 1.0) < 0.05)
 _v = mxc[shirtz & cloth]
 print('TRIPO shirt value pct', [round(float(np.percentile(_v, q)), 3) for q in (1, 5, 10, 25, 50, 75)])
-bad = shirtz & ~cloth & ~skinlike & ~trim & ((mxc < 0.5) | (sat < 0.2))
+bad = shirtz & ~cloth & ~skinlike & ~trim & (mxc < 0.4) & ~above_collar   # dark arm-shadow smudges only; pale skin is not a smudge
 good = shirtz & cloth & ~trim
 # the kit paint is flat, so the shirt's median colour is the right fill (runtime recolour re-shades it anyway)
 fill = np.broadcast_to(np.median(rgb[good], axis=0) if good.any() else np.array([0.8, 0.1, 0.1]), rgb.shape)
@@ -934,12 +998,38 @@ if (bad & known).any():
     Image_out.filepath_raw = tex_path; Image_out.file_format = 'PNG'; Image_out.save()
     subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '90', '-Z', '2048', tex_path, '--out', jpg], capture_output=True)
     os.remove(tex_path)
+# Neck skin painted in jersey colour: repaint it with the character's own skin (keeping the painted shading).
+_kitT = (mxc > 0.12) & (((sat > 0.3) & (np.minimum(hdist(0.0), hdist(_shirt_h)) < 0.07)) | ((sat > 0.28) & ((hdist(0.62) < 0.09) | (hdist(0.37) < 0.09))))
+_rp = above_collar & _kitT
+neckT = _rp.copy()
+if neck_skin is not None and _rp.any():
+    shade = np.clip(mxc[_rp] / max(float(neck_skin.max()), 1e-3), 0.65, 1.1)[:, None]
+    rgb = rgb.copy(); rgb[_rp] = np.clip(neck_skin[None, :] * shade, 0, 1)
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, np.power((np.clip(rgb, 0, 1) + 0.055) / 1.055, 2.4)).astype(np.float32)
+    Image_out = bpy.data.images.new('out3', lin.shape[1], lin.shape[0])
+    Image_out.pixels[:] = np.dstack([lin, np.ones(lin.shape[:2], np.float32)]).ravel()
+    Image_out.filepath_raw = tex_path; Image_out.file_format = 'PNG'; Image_out.save()
+    subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '90', '-Z', '2048', tex_path, '--out', jpg], capture_output=True)
+    os.remove(tex_path)
+print('TRIPO neck texels repainted as skin', int(_rp.sum()))
 cloth = dil(ero(cloth, 1), 2) & (zone > 0.3)
 mask = (cloth.astype(np.float32) * np.clip(zone, 0, 1))
-# Grow the mask past UV island borders so no unrecoloured texel survives at a seam (the 'faint lines').
-# Safe: the runtime only repaints kit-coloured pixels inside the mask.
+mask_in = mask.copy()
+# Grow the mask past UV island borders so no unrecoloured texel survives at a seam (the 'faint lines')...
 for _ in range(10):
     mask = np.maximum.reduce([mask, np.roll(mask, 1, 0), np.roll(mask, -1, 0), np.roll(mask, 1, 1), np.roll(mask, -1, 1)])
+# Inside real islands the grown mask only lands on kit-looking texels (jersey shading the classifier missed);
+# dark hair/beard or skin keeps the exact mask. Empty texture space keeps the full growth (seam lines).
+_loose = (mxc > 0.15) & (sat > 0.15) & ((np.minimum(hdist(0.0), hdist(_shirt_h)) < 0.08) | (hdist(0.62) < 0.1) | (hdist(0.37) < 0.1) | (hdist(0.13) < 0.06))
+_inside = cover & ~dil(~cover, 1)
+mask = np.where(_inside & ~_loose, mask_in, mask)
+# ...and never into head-zone texels (face, eyes, hair, beard) of a real island, nor the repainted neck.
+mask[cover & (zone < 0.3)] = 0.0
+mask[neckT | above_collar] = 0.0   # nothing above the collar is ever kit
+# near the neck/shoulders, dark non-red texels are beard, dark skin, hijab or hair — never the (bright red) jersey
+_dark_top = cover & (P3[:, :, 2] > Zf(0.74)) & (np.abs(P3[:, :, 0]) < 0.12 * H) & (mxc < 0.3) & (np.minimum(hdist(0.0), hdist(_shirt_h)) > 0.08)
+mask[_dark_top] = 0.0
+mask[dil(_dark_top & ~_kitT, 3)] = 0.0          # no blended fringe onto beards/dark skin after downsampling
 # ...but never onto skin: pale skin's pinkish shadows sit near the jersey-red hue, and the runtime would repaint the
 # neck/chin in the kit colour. Skin-like texels that aren't right at a cloth edge leave the mask.
 skinish = (~cloth) & (sat < 0.42) & (mxc > 0.28) & ((hdist(skin_h) < 0.07) | (hdist(0.0) < 0.07) | (hdist(0.97) < 0.05))
@@ -952,6 +1042,15 @@ _near_cloth = dil(cloth, 2)
 _cut = skinish & ~_near_cloth
 mask[_cut] = 0.0
 print('TRIPO mask skin-guard cleared', int(_cut.sum()), 'texels')
+if '--chindbg' in A:
+    r_ = cover & _kitT & (P3[:, :, 2] > Zf(0.77)) & (P3[:, :, 2] < Zf(0.86)) & (np.abs(P3[:, :, 0]) < 0.1 * H) & ~above_collar
+    ys_, xs_ = np.nonzero(r_)
+    print('CHINDBG kit texels near neck NOT above collar', len(ys_))
+    if len(ys_):
+        pp = P3[ys_, xs_]
+        H2, xe, ze = np.histogram2d(pp[:, 0] / H, (pp[:, 2] - mn.z) / H, bins=[8, 6])
+        print('x bins', np.round(xe, 3)); print('z bins', np.round(ze, 3)); print(H2.astype(int))
+        print('front frac', float((pp[:, 1] < _ny).mean()), 'trim n', len(Tp), 'trim x range %.3f..%.3f z %.3f..%.3f' % (Tp[:, 0].min() / H, Tp[:, 0].max() / H, (Tp[:, 2].min() - mn.z) / H, (Tp[:, 2].max() - mn.z) / H))
 mimg = bpy.data.images.new('mask', T, T, alpha=False)
 mimg.pixels[:] = np.dstack([mask, mask, mask, np.ones_like(mask)]).ravel()
 mask_path = os.path.join(OUT, NAME + '_mask.png')
@@ -1028,11 +1127,11 @@ if '--preview' in A:
         cam.rotation_euler = (math.radians(90), 0, a)
         scene.render.filepath = os.path.join(ROOT, 'art', 'tripo', f'{NAME}_prev_{nm}.png')
         bpy.ops.render.render(write_still=True)
-    cd.ortho_scale = H * 0.2
+    cd.ortho_scale = H * 0.3
     scene.render.resolution_x, scene.render.resolution_y = 600, 600
     for nm, deg in (('front', 0), ('34', 40)):
         a = math.radians(deg)
-        cam.location = (math.sin(a) * 6, -math.cos(a) * 6, mn.z + H * 0.91)
+        cam.location = (math.sin(a) * 6, -math.cos(a) * 6, mn.z + H * 0.85)
         cam.rotation_euler = (math.radians(90), 0, a)
         scene.render.filepath = os.path.join(ROOT, 'art', 'tripo', f'{NAME}_head_{nm}.png')
         bpy.ops.render.render(write_still=True)
