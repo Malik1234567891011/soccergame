@@ -20,7 +20,7 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 
 # ------------------------------------------------------------------ import + normalise
-bpy.ops.import_scene.gltf(filepath=os.path.abspath(arg('--mesh')))
+bpy.ops.import_scene.gltf(filepath=os.path.abspath(arg('--mesh')), merge_vertices=True)
 meshes = [o for o in scene.objects if o.type == 'MESH']
 for o in scene.objects: o.select_set(o in meshes)
 bpy.context.view_layer.objects.active = meshes[0]
@@ -34,6 +34,15 @@ for o in list(scene.objects):
 def bbox(o):
     c = np.array([v.co[:] for v in o.data.vertices])
     return Vector(c.min(0)), Vector(c.max(0))
+# Orientation: studio viewer GLBs and exports differ. Put the arm span on X, then face -Y (boot toes point forward).
+_c = np.array([v.co[:] for v in obj.data.vertices]); _z0, _z1 = _c[:, 2].min(), _c[:, 2].max(); _h = _z1 - _z0
+_band = _c[(_c[:, 2] > _z0 + 0.55 * _h) & (_c[:, 2] < _z0 + 0.75 * _h)]
+if np.ptp(_band[:, 1]) > np.ptp(_band[:, 0]) * 1.15:
+    obj.data.transform(Matrix.Rotation(math.radians(-90), 4, 'Z')); _c = np.array([v.co[:] for v in obj.data.vertices])
+toes = _c[_c[:, 2] < _z0 + 0.02 * _h, 1].mean(); ankles = _c[(_c[:, 2] > _z0 + 0.05 * _h) & (_c[:, 2] < _z0 + 0.09 * _h), 1].mean()
+if toes > ankles:
+    obj.data.transform(Matrix.Rotation(math.radians(180), 4, 'Z'))
+print('TRIPO orient: toes-ankles %.3f' % (toes - ankles))
 mn, mx = bbox(obj)
 s = HEIGHT / (mx.z - mn.z)
 ctr = Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, mn.z))
@@ -45,6 +54,28 @@ if n0 > TRIS * 1.05:
 for p in obj.data.polygons: p.use_smooth = True
 mn, mx = bbox(obj); H = mx.z - mn.z
 print('TRIPO mesh', n0, '->', len(obj.data.polygons), 'faces; bbox', tuple(mn), tuple(mx))
+
+# ------------------------------------------------------------------ hidden inner layers
+# Generated meshes carry a body shell under the kit. When the two layers bend by slightly different amounts the
+# inner one pokes through as jagged dark tears, so delete faces that an outer layer fully covers (below the head).
+from mathutils.bvhtree import BVHTree
+bm = bmesh.new(); bm.from_mesh(obj.data); bm.faces.ensure_lookup_table()
+tree = BVHTree.FromBMesh(bm)
+hid = []
+for f in bm.faces:
+    c = f.calc_center_median()
+    if c.z > mn.z + 0.83 * H: continue
+    nrm = f.normal
+    if nrm.length < 0.5: continue
+    covered = True
+    for o_ in (Vector((0, 0, 0)), (f.verts[0].co - c) * 0.8, (f.verts[1].co - c) * 0.8):
+        loc, hn, idx, dist = tree.ray_cast(c + o_ + nrm * 0.0015 * H, nrm, 0.008 * H)   # a skin-tight layer, never a limb
+        if idx is None or idx == f.index or hn.dot(nrm) < 0.7: covered = False; break
+    if covered: hid.append(f)
+bmesh.ops.delete(bm, geom=hid, context='FACES')
+bm.to_mesh(obj.data); bm.free()
+print('TRIPO hidden faces removed', len(hid), 'of', n0 if False else len(obj.data.polygons) + len(hid))
+mn, mx = bbox(obj); H = mx.z - mn.z
 
 # ------------------------------------------------------------------ texture (the model's own base colour)
 def base_image(mat):
@@ -115,18 +146,321 @@ bone('spine', J(0, Zf(0.58)), J(0, Zf(0.67)), 'hips')
 bone('chest', J(0, Zf(0.67)), J(0, Zf(0.79)), 'spine')
 bone('neck', J(0, Zf(0.79)), J(0, Zf(0.83)), 'chest')
 bone('head', J(0, Zf(0.83)), J(0, Zf(1.0)), 'neck')
+# Arms: walk down in thin horizontal slabs; the arm is the outermost cross-section that is its own connected piece
+# (separated from the torso by a gap). That traces the real arm centreline even when a hand rests on the shorts.
+CELL = 0.013 * H
+def comps(pts):
+    keys = {}
+    for i, (x, y) in enumerate(pts[:, :2]): keys.setdefault((int(math.floor(x / CELL)), int(math.floor(y / CELL))), []).append(i)
+    seen, out = set(), []
+    for k in keys:
+        if k in seen: continue
+        stack, idx = [k], []; seen.add(k)
+        while stack:
+            c = stack.pop(); idx += keys[c]
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    nb = (c[0] + dx, c[1] + dy)
+                    if nb in keys and nb not in seen: seen.add(nb); stack.append(nb)
+        out.append(np.array(idx))
+    return out
+# torso half-width: the connected piece through the middle at waist height (arms hang free there)
+_m = (vs[:, 2] > Zf(0.60)) & (vs[:, 2] < Zf(0.64)); _sl = vs[_m]
+if len(_sl) > 20:
+    _c = min(comps(_sl), key=lambda c: np.abs(_sl[c, 0]).min())
+    torso_hw = float(np.percentile(np.abs(_sl[_c, 0]), 97))
+print('TRIPO torso_hw %.3f H' % (torso_hw / H))
+arm_label = np.zeros(len(vs), dtype=np.int8)   # +1 left arm, -1 right arm
+arm_track = {1: [], -1: []}
+arm_seeds = {1: np.zeros(0, int), -1: np.zeros(0, int)}
+cands = {1: [], -1: []}
+zs = np.arange(Zf(0.80), Zf(0.28), -0.5 * CELL)
+for z in zs:
+    m = (vs[:, 2] >= z - 0.5 * CELL) & (vs[:, 2] < z + 0.5 * CELL)
+    sl = vs[m]; si = np.where(m)[0]
+    per = {1: [], -1: []}
+    if len(sl) >= 5:
+        for c in comps(sl):
+            if len(c) < 3: continue                                     # stray cloth shell fragments
+            xs = sl[c, 0]; sgn = 1 if xs.mean() > 0 else -1
+            if (xs * sgn).min() < 0.045 * H: continue                    # reaches the midline: torso / pelvis
+            ctr_ = sl[c, :2].mean(0)
+            rad = float(np.percentile(np.linalg.norm(sl[c, :2] - ctr_, axis=1), 90))
+            per[sgn].append((float(ctr_[0]), float(ctr_[1]), float(z), rad, si[c]))
+    for sgn in (1, -1):
+        # a sparse forearm slab can split into inner/outer surface pieces: merge pieces within an arm's width
+        ps = sorted(per[sgn], key=lambda q: q[0] * sgn)
+        merged = []
+        for q in ps:
+            if merged and min(len(q[4]), len(merged[-1][4])) <= 12 and abs(q[0] - merged[-1][0]) < 0.08 * H and abs(q[1] - merged[-1][1]) < 0.07 * H:
+                ii = np.concatenate([merged[-1][4], q[4]]); pts_ = vs[ii, :2]; ctr_ = pts_.mean(0)
+                merged[-1] = (float(ctr_[0]), float(ctr_[1]), q[2], float(np.percentile(np.linalg.norm(pts_ - ctr_, axis=1), 90)), ii)
+            else: merged.append(q)
+        cands[sgn].append(merged)
+if '--armdbg' in A:
+    for zi, z in enumerate(zs):
+        if Zf(0.36) < z < Zf(0.56): print('  cand z %.3f' % ((z - mn.z) / H), [('%.3f' % (q[0] / H), '%.3f' % (q[1] / H), len(q[4])) for q in cands[1][zi]])
+# Legs: follow each leg up from the ankle; an 'arm' section that coincides with a leg section is thigh/shorts.
+leg_at = {}
+for sgn in (1, -1):
+    prev = None
+    for zi in range(len(zs) - 1, -1, -1):
+        z = zs[zi]
+        if z < Zf(0.08) or z > Zf(0.50): continue
+        m = (vs[:, 2] >= z - 0.5 * CELL) & (vs[:, 2] < z + 0.5 * CELL); sl = vs[m]
+        if len(sl) < 5: continue
+        best_ = None
+        for c in comps(sl):
+            if len(c) < 6: continue
+            ctr_ = sl[c, :2].mean(0)
+            if ctr_[0] * sgn <= 0: continue
+            d_ = abs(ctr_[0] - prev[0]) + abs(ctr_[1] - prev[1]) if prev is not None else -len(c)
+            if prev is not None and d_ > 0.06 * H: continue
+            if best_ is None or d_ < best_[0]: best_ = (d_, ctr_, float(np.percentile(np.linalg.norm(sl[c, :2] - ctr_, axis=1), 95)))
+        if best_ is not None:
+            prev = best_[1]; leg_at[(sgn, zi)] = (best_[1], best_[2])
+# a hand resting on the shorts merges into the 'leg' section: clamp each leg to its thigh's own centre and radius
+for sgn in (1, -1):
+    ref = [v_ for (s_, zi_), v_ in leg_at.items() if s_ == sgn and Zf(0.2) < zs[zi_] < Zf(0.33)]
+    if not ref: continue
+    cx_ = np.median([c[0][0] for c in ref]); cy_ = np.median([c[0][1] for c in ref]); rr_ = np.median([c[1] for c in ref])
+    for k_ in [k for k in leg_at if k[0] == sgn]:
+        c_, r_ = leg_at[k_]
+        c_ = np.array([np.clip(c_[0], cx_ - 0.02 * H, cx_ + 0.02 * H), np.clip(c_[1], cy_ - 0.03 * H, cy_ + 0.03 * H)])
+        leg_at[k_] = (c_, min(r_, rr_ * 1.25))
+# torso silhouette: per slab, the half-width of the cross-section piece that crosses the midline
+_tz, _tw = [], []
+for z in zs:
+    m_ = (vs[:, 2] >= z - 0.5 * CELL) & (vs[:, 2] < z + 0.5 * CELL); sl_ = vs[m_]
+    if len(sl_) < 8: continue
+    mid = [c for c in comps(sl_) if np.abs(sl_[c, 0]).min() < 0.02 * H]
+    if mid:
+        c = max(mid, key=len); _tz.append(z); _tw.append(float(np.percentile(np.abs(sl_[c, 0]), 95)))
+_tz = np.array(_tz[::-1]); _tw = np.array(_tw[::-1])
+def torso_edge(z): return np.interp(z, _tz, _tw) if len(_tz) else 0.12 * H
+leg_mask = np.zeros(len(vs), bool)
+# code-kit shorts are blue: a fused hand must never grow into shorts-coloured surface
+_uvl = obj.data.uv_layers.active.data; _vuv = np.zeros((len(vs), 2))
+for l_ in obj.data.loops: _vuv[l_.vertex_index] = _uvl[l_.index].uv
+_ty, _tx = tex_srgb.shape[:2]
+_px = tex_srgb[np.clip((_vuv[:, 1] * _ty).astype(int), 0, _ty - 1), np.clip((_vuv[:, 0] * _tx).astype(int), 0, _tx - 1)]
+_mx = _px.max(1); _mn = _px.min(1); _sat = (_mx - _mn) / np.maximum(_mx, 1e-6)
+_hue = np.array([colorsys.rgb_to_hsv(*c)[0] for c in _px])
+shorts_px = (np.minimum(np.abs(_hue - 0.62), 1 - np.abs(_hue - 0.62)) < 0.07) & (_sat > 0.3) & (_mx > 0.12) & (vs[:, 2] < Zf(0.56))
+leg_mask |= shorts_px
+print('TRIPO shorts-blue verts', int(shorts_px.sum()))
+for (sgn_, zi_), (c_, r_) in leg_at.items():
+    z_ = zs[zi_]; m_ = (vs[:, 2] >= z_ - 0.5 * CELL) & (vs[:, 2] < z_ + 0.5 * CELL)
+    leg_mask[np.where(m_)[0][np.hypot(vs[m_, 0] - c_[0], vs[m_, 1] - c_[1]) < r_ + 0.004 * H]] = True
+def on_leg(q, zi):
+    for sgn in (1, -1):
+        l_ = leg_at.get((sgn, zi))
+        if l_ is not None and math.hypot(q[0] - l_[0][0], q[1] - l_[0][1]) < l_[1] + 0.005 * H: return True
+    return False
+for sgn in (1, -1):
+    # start at the highest slab where the outermost separate piece appears, then follow it down continuously
+    def track(tol):
+        best = []
+        for i, per in enumerate(cands[sgn]):
+            if not per: continue
+            start = max(per, key=lambda q: q[0] * sgn)
+            tr, miss, j = [start], 0, i + 1
+            while j < len(cands[sgn]) and miss <= 4:
+                # predict x from a line through the recent track so an angled (A-pose) forearm is followed
+                px = tr[-1][0]
+                if len(tr) >= 4 and cands[sgn][j]:
+                    last = np.array([(t_[2], t_[0]) for t_ in tr[-8:]])
+                    k1, k0 = np.polyfit(last[:, 0], last[:, 1], 1) if np.ptp(last[:, 0]) > 1e-6 else (0.0, last[-1, 1])
+                    px = k1 * cands[sgn][j][0][2] + k0
+                nx = [q for q in cands[sgn][j] if abs(q[0] - px) < tol and abs(q[1] - tr[-1][1]) < 0.05 * H and not on_leg(q, j)]
+                if nx: tr.append(max(nx, key=lambda q: q[0] * sgn)); miss = 0   # the arm is the outermost section; drifts are always medial
+                else: miss += 1
+                j += 1
+            if len(tr) > len(best): best = tr
+            if len(best) > 20: break
+        return best
+    # strict first; a looser follow only wins if it reaches further AND ends out at the hand, not drifted onto the hip
+    best = track(0.045 * H)
+    loose = track(0.065 * H)
+    if loose and (not best or loose[-1][2] < best[-1][2] - 0.02 * H) and abs(loose[-1][0]) >= abs(loose[0][0]) * 0.85:
+        best = loose
+    if best:
+        seeds = np.concatenate([t_[4] for t_ in best])
+        arr = np.array([t_[:4] for t_ in best])
+        k = 2   # median-smooth the centreline and radius
+        sm = np.array([np.median(arr[max(0, i - k):i + k + 1], axis=0) for i in range(len(arr))]); sm[:, 2] = arr[:, 2]
+        best = [tuple(r_) for r_ in sm]
+    arm_track[sgn] = best
+    arm_seeds[sgn] = seeds if best else np.zeros(0, int)
+# An arm pressed against the body loses its track early; generated characters are near-symmetric in the A-pose,
+# so mirror the other side's arm when one side is much shorter.
+def _ext(t): return (t[0][2] - t[-1][2]) if t else 0.0
+for sgn in (1, -1):
+    other = arm_track[-sgn]
+    if other and _ext(arm_track[sgn]) < 0.7 * _ext(other):
+        mt, ms = [], []
+        for (x_, y_, z_, r_) in other:
+            mt.append((-x_, y_, z_, r_))
+            sl_ = np.where((vs[:, 2] >= z_ - 0.5 * CELL) & (vs[:, 2] < z_ + 0.5 * CELL))[0]
+            ms.append(sl_[np.hypot(vs[sl_, 0] + x_, vs[sl_, 1] - y_) < r_ * 1.1])
+        print('TRIPO arm', 'L' if sgn > 0 else 'R', 'mirrored from the other side (%.2f vs %.2f)' % (_ext(arm_track[sgn]) / H, _ext(other) / H))
+        arm_track[sgn] = mt; arm_seeds[sgn] = np.concatenate(ms) if ms else np.zeros(0, int)
+for sgn in (1, -1):
+    best = arm_track[sgn]; seeds = arm_seeds[sgn]
+    if '--armdbg' in A:
+        for t_ in best: print('  trk z %.3f x %.3f y %.3f r %.3f' % ((t_[2] - mn.z) / H, t_[0] / H, t_[1] / H, t_[3] / H))
+    print('TRIPO arm', 'L' if sgn > 0 else 'R', len(best), 'slabs', 'z %.2f..%.2f' % ((best[0][2] - mn.z) / H, (best[-1][2] - mn.z) / H) if best else '')
+    if not best: continue
+    tz = np.array([t_[2] for t_ in best])[::-1]; tx = np.array([t_[0] for t_ in best])[::-1]
+    ty = np.array([t_[1] for t_ in best])[::-1]; tr_ = np.array([t_[3] for t_ in best])[::-1]
+    m = (vs[:, 0] * sgn > 0.04 * H) & (vs[:, 2] < tz[-1] + 0.01 * H) & (vs[:, 2] > tz[0] - 0.12 * H)
+    cz = np.clip(vs[m, 2], tz[0], tz[-1])
+    dxy = np.hypot(vs[m, 0] - np.interp(cz, tz, tx), vs[m, 1] - np.interp(cz, tz, ty))
+    rr = np.maximum(np.interp(cz, tz, tr_), 0.022 * H)
+    lim = rr * 1.3 + 0.006 * H
+    below = vs[m, 2] < tz[0]
+    lim[below] *= np.clip(1 - (tz[0] - vs[m, 2][below]) / (0.08 * H), 0.4, 1)   # fingertips taper
+    lim_g = rr * 1.3 + 0.006 * H
+    inside_ = np.zeros(len(vs), bool); inside_[np.where(m)[0][dxy < lim]] = True
+    # seed only from separated cross-sections of the upper arm (reliable); the rest is reached through the mesh itself
+    arm_label[seeds[inside_[seeds] & ~leg_mask[seeds] & (vs[seeds, 2] > tz[-1] - 0.22 * H)]] = sgn
+    # grow across mesh edges inside a generous tube so a face never straddles arm / body
+    cand_ = np.zeros(len(vs), bool); cand_[np.where(m)[0][dxy < lim_g * 1.35 + 0.012 * H]] = True
+    # below the tracked end (hand) follow the mesh freely nearby; legs and shorts are already excluded
+    _end = np.array([tx[0], np.interp(tz[0], tz, ty) if len(tz) else 0, tz[0]])
+    cand_ |= (vs[:, 2] < tz[0] + 0.02 * H) & (np.linalg.norm(vs - _end, axis=1) < 0.15 * H) & (vs[:, 0] * sgn > 0.05 * H)
+    cand_ &= (vs[:, 2] < tz[-1] - 0.05 * H) & ~leg_mask
+    _cz = np.clip(vs[:, 2], tz[0], tz[-1])
+    cand_ &= vs[:, 0] * sgn > np.interp(_cz, tz, tx) * sgn - np.maximum(np.interp(_cz, tz, tr_), 0.022 * H) * 1.3   # never medial of the arm
+    ev_ = np.array([e.vertices[:] for e in obj.data.edges])
+    from mathutils.kdtree import KDTree
+    for _round in range(6):
+        for _ in range(250):
+            a_, b_ = ev_[:, 0], ev_[:, 1]
+            grow = np.zeros(len(vs), bool)
+            grow[b_[(arm_label[a_] == sgn) & cand_[b_]]] = True; grow[a_[(arm_label[b_] == sgn) & cand_[a_]]] = True
+            new_ = grow & (arm_label == 0)
+            if not new_.any(): break
+            arm_label[new_] = sgn
+        # hop small gaps (a hand modelled as a separate shell at the wrist seam)
+        li = np.where(arm_label == sgn)[0]; kd = KDTree(len(li))
+        for k_, i_ in enumerate(li): kd.insert(vs[i_], k_)
+        kd.balance()
+        hop = [i_ for i_ in np.where(cand_ & (arm_label == 0))[0] if kd.find(vs[i_])[2] < 0.012 * H]
+        if not hop: break
+        arm_label[hop] = sgn
+    if '--handdbg' in A and sgn == -1:
+        hb = (vs[:, 0] < -0.15 * H) & (vs[:, 2] > Zf(0.36)) & (vs[:, 2] < Zf(0.44))
+        print('HANDDBG n', int(hb.sum()), 'lab', int((arm_label[hb] == sgn).sum()), 'leg', int(leg_mask[hb].sum()), 'shorts', int(shorts_px[hb].sum()), 'cand', int(cand_[hb].sum()), 'tz0 %.3f tzT %.3f' % ((tz[0] - mn.z) / H, (tz[-1] - mn.z) / H), 'end', _end / H)
+    # an unlabelled vertex mostly surrounded by arm is arm (stray fingertip / seam vertices)
+    for _ in range(3):
+        a_, b_ = ev_[:, 0], ev_[:, 1]
+        deg = np.bincount(np.r_[a_, b_], minlength=len(vs))
+        armn = np.bincount(np.r_[a_[arm_label[b_] == sgn], b_[arm_label[a_] == sgn]], minlength=len(vs))
+        arm_label[(arm_label == 0) & (deg > 0) & (armn * 2 >= deg) & (vs[:, 0] * sgn > 0.045 * H) & ~leg_mask] = sgn
+# islands touching the arm (a hand modelled as its own shell) that lie in the arm's reach join it
+from mathutils.kdtree import KDTree
+for sgn in (1, -1):
+    idx_ = np.where(arm_label == sgn)[0]
+    if not len(idx_): continue
+    kd = KDTree(len(idx_))
+    for k_, i_ in enumerate(idx_): kd.insert(vs[i_], k_)
+    kd.balance()
+    near = np.zeros(len(vs), bool)
+    cand_v = np.where((arm_label == 0) & (vs[:, 0] * sgn > 0.05 * H) & ~leg_mask)[0]
+    for i_ in cand_v:
+        if kd.find(vs[i_])[2] < 0.015 * H: near[i_] = True
+    _isl_tmp = None
+    near_by_isl = {}
+    globals()['_near_' + str(sgn)] = near
+# mesh islands (separate shells: fingers, sleeve layers): an island that is mostly arm is all arm
+_ev = np.array([e.vertices[:] for e in obj.data.edges])
+_par = np.arange(len(vs))
+def _find(i):
+    while _par[i] != i: _par[i] = _par[_par[i]]; i = _par[i]
+    return i
+for a_, b_ in _ev:
+    ra, rb = _find(a_), _find(b_)
+    if ra != rb: _par[ra] = rb
+isl = np.array([_find(i) for i in range(len(vs))])
+for sgn in (1, -1):
+    frac = np.bincount(isl, weights=(arm_label == sgn).astype(float), minlength=len(vs)) / np.maximum(np.bincount(isl, minlength=len(vs)), 1)
+    near = globals().get('_near_' + str(sgn), np.zeros(len(vs), bool))
+    touched = np.bincount(isl, weights=near.astype(float), minlength=len(vs)) > 0
+    lat_ok = np.bincount(isl, weights=((vs[:, 0] * sgn > 0.05 * H) & ~leg_mask & (vs[:, 2] < Zf(0.6))).astype(float), minlength=len(vs)) / np.maximum(np.bincount(isl, minlength=len(vs)), 1)
+    small = np.bincount(isl, minlength=len(vs)) < 1500
+    sel = ((frac[isl] >= 0.5) | (touched[isl] & (lat_ok[isl] > 0.98) & small[isl])) & (arm_label == 0)
+    print('TRIPO islands side', sgn, 'relabelled', int(sel.sum()))
+    arm_label[sel] = sgn
+# Hard bound: nothing medial to the arm's inner edge, and nothing above the tracked armpit, is arm.
+for sgn in (1, -1):
+    tr = arm_track[sgn]
+    if not tr: arm_label[arm_label == sgn] = 0; continue
+    tz = np.array([t_[2] for t_ in tr])[::-1]; tx = np.array([t_[0] for t_ in tr])[::-1]; trr = np.array([t_[3] for t_ in tr])[::-1]
+    idx = np.where(arm_label == sgn)[0]
+    cz = np.clip(vs[idx, 2], tz[0], tz[-1])
+    inner = np.interp(cz, tz, tx) * sgn - np.maximum(np.interp(cz, tz, trr), 0.022 * H) * 1.5 - 0.006 * H
+    bad = (vs[idx, 0] * sgn < inner) | (vs[idx, 2] > tz[-1] - 0.05 * H)   # the contact band under the armpit is blended, not cut
+    arm_label[idx[bad]] = 0
+    print('TRIPO arm bound side', sgn, 'unlabelled', int(bad.sum()))
+# Kit guard: below the elbow an arm is skin (or glove), never shirt red / shorts blue / sock green.
+def _hd(h0): d_ = np.abs(_hue - h0); return np.minimum(d_, 1 - d_)
+# the shirt's own hue, measured on the chest front (generated reds range from crimson to orange-red)
+_chest = (np.abs(vs[:, 0]) < 0.05 * H) & (vs[:, 2] > Zf(0.62)) & (vs[:, 2] < Zf(0.70)) & (vs[:, 1] < np.median(vs[:, 1])) & (_sat > 0.4)
+_shirt_h = float(np.median(np.where(_hue[_chest] > 0.5, _hue[_chest] - 1, _hue[_chest]))) % 1.0 if _chest.sum() > 10 else 0.0
+_kit = (_mx > 0.12) & (((_sat > 0.45) & (_hd(_shirt_h) < 0.04)) | ((_sat > 0.3) & ((_hd(0.62) < 0.08) | (_hd(0.37) < 0.08))))
+print('TRIPO shirt hue %.3f' % _shirt_h)
+for sgn in (1, -1):
+    tr = arm_track[sgn]
+    if not tr: continue
+    elz = tr[0][2] + (tr[-1][2] - tr[0][2]) * 0.45
+    bad_ = (arm_label == sgn) & _kit & (vs[:, 2] < elz)
+    arm_label[bad_] = 0
+    print('TRIPO kit guard side', sgn, 'unlabelled', int(bad_.sum()))
+# Rip the surface where arm meets body below the armpit (hands/arms touching the torso or shorts in the source):
+# each face goes wholly to one side, so nothing is ever stretched between a swinging arm and the body.
+_ap = {sgn: (arm_track[sgn][0][2] if arm_track[sgn] else Zf(0.74)) for sgn in (1, -1)}
+# cut only from the elbow down (hands/forearms resting on the body); higher up a smooth stretch beats a hole
+_elz = {sgn: (arm_track[sgn][0][2] + (arm_track[sgn][-1][2] - arm_track[sgn][0][2]) * 0.45 if arm_track[sgn] else Zf(0.6)) for sgn in (1, -1)}
+bm = bmesh.new(); bm.from_mesh(obj.data); bm.verts.ensure_lookup_table(); bm.faces.ensure_lookup_table()
+flab = {}
+for f in bm.faces:
+    ls = [int(arm_label[v.index]) for v in f.verts]
+    nz_ = [l for l in ls if l]
+    flab[f.index] = (max(set(nz_), key=nz_.count) if len(nz_) * 2 >= len(ls) else 0)
+cut = [e for e in bm.edges if len(e.link_faces) == 2 and flab[e.link_faces[0].index] != flab[e.link_faces[1].index]
+       and max(v.co.z for v in e.verts) < _elz[flab[e.link_faces[0].index] or flab[e.link_faces[1].index]]]
+bmesh.ops.split_edges(bm, edges=cut)
+bm.verts.ensure_lookup_table(); bm.faces.ensure_lookup_table()
+nl = np.zeros(len(bm.verts), dtype=np.int8)
+for f in bm.faces:
+    if flab[f.index]:
+        for v in f.verts: nl[v.index] = flab[f.index]
+bm.to_mesh(obj.data); bm.free()
+arm_label = nl
+leg_mask = np.concatenate([leg_mask, np.zeros(len(nl) - len(leg_mask), bool)])
+vs = np.array([v.co[:] for v in obj.data.vertices])
+print('TRIPO rip', len(cut), 'edges; verts now', len(vs))
 for sgn, side in ((1, 'L'), (-1, 'R')):
-    pts = armband[(armband[:, 0] * sgn) > torso_hw * 1.05]
-    sh = J(sgn * torso_hw * 0.95, Zf(0.785))
-    if len(pts):
-        hand = pts[np.argmin(pts[:, 2])]
-        tip = Vector((hand[0], depth_at(hand[0], hand[2]), hand[2]))
+    tr = arm_track[sgn]
+    if len(tr) >= 4:
+        top, bot = tr[0], tr[-1]
+        sh = Vector((top[0] - sgn * 0.01 * H, top[1], max(top[2] + 0.04 * H, Zf(0.765))))
+        # fingertips: the lowest arm vertex of this side
+        low = vs[arm_label == sgn]; lp = low[np.argmin(low[:, 2])]
+        tip = Vector((bot[0], bot[1], float(lp[2])))
     else:
-        tip = J(sgn * 0.3 * H, Zf(0.45))
+        sh = J(sgn * torso_hw * 0.95, Zf(0.785)); tip = J(sgn * 0.3 * H, Zf(0.45))
     d = tip - sh
-    bone('upperarm.' + side, sh, sh + d * 0.47 + Vector((0, 0.01, 0)), 'chest')
-    bone('forearm.' + side, sh + d * 0.47 + Vector((0, 0.01, 0)), sh + d * 0.84, 'upperarm.' + side)
-    bone('hand.' + side, sh + d * 0.84, tip, 'forearm.' + side)
+    def on_track(f):
+        z_ = sh.z + d.z * f
+        if len(tr) >= 4:
+            t_ = min(tr, key=lambda q: abs(q[2] - z_)); return Vector((t_[0], t_[1], z_))
+        return sh + d * f
+    elbow, wrist = on_track(0.47), on_track(0.80)
+    bone('upperarm.' + side, sh, elbow, 'chest')
+    bone('forearm.' + side, elbow, wrist, 'upperarm.' + side)
+    bone('hand.' + side, wrist, tip, 'forearm.' + side)
     # legs: centre of each leg's cross-section at hip/knee/ankle height
     def leg_x(f):
         sl = slab(Zf(f - 0.02), Zf(f + 0.02)); sl = sl[(sl[:, 0] * sgn) > 0.01]
@@ -138,13 +472,23 @@ for sgn, side in ((1, 'L'), (-1, 'R')):
 bpy.ops.object.mode_set(mode='OBJECT')
 # Generated meshes are many overlapping shells, so heat weighting fails on them. Skin a watertight voxel proxy
 # of the body instead, then transfer its weights to the real mesh (nearest surface, interpolated).
-proxy = obj.copy(); proxy.data = obj.data.copy(); scene.collection.objects.link(proxy)
-rm = proxy.modifiers.new('vox', 'REMESH'); rm.mode = 'VOXEL'; rm.voxel_size = 0.009 * H; rm.use_smooth_shade = True
-bpy.ops.object.select_all(action='DESELECT'); proxy.select_set(True); bpy.context.view_layer.objects.active = proxy
-bpy.ops.object.modifier_apply(modifier='vox')
-proxy.data.materials.clear()
-bpy.ops.object.select_all(action='DESELECT'); proxy.select_set(True); ro.select_set(True); bpy.context.view_layer.objects.active = ro
-bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+# Heat weighting can fail on a proxy (thin gaps, stray shells): retry coarser, then fall back to envelopes.
+for vox in (0.009, 0.013, 0.018, None):
+    proxy = obj.copy(); proxy.data = obj.data.copy(); scene.collection.objects.link(proxy)
+    rm = proxy.modifiers.new('vox', 'REMESH'); rm.mode = 'VOXEL'; rm.voxel_size = (vox or 0.018) * H; rm.use_smooth_shade = True
+    bpy.ops.object.select_all(action='DESELECT'); proxy.select_set(True); bpy.context.view_layer.objects.active = proxy
+    bpy.ops.object.modifier_apply(modifier='vox')
+    proxy.data.materials.clear()
+    bpy.ops.object.select_all(action='DESELECT'); proxy.select_set(True); ro.select_set(True); bpy.context.view_layer.objects.active = ro
+    if vox is None:
+        for b_ in arm.bones: pass
+        bpy.ops.object.parent_set(type='ARMATURE_ENVELOPE')
+    else:
+        bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+    wn = sum(1 for v in proxy.data.vertices if v.groups)
+    if wn > 0.9 * len(proxy.data.vertices) or vox is None: break
+    print('TRIPO proxy heat failed at voxel', vox, '- retrying')
+    bpy.data.objects.remove(proxy)
 print('TRIPO proxy', len(proxy.data.vertices), 'verts; weighted', sum(1 for v in proxy.data.vertices if v.groups))
 for b in arm.bones: obj.vertex_groups.new(name=b.name)
 dt = obj.modifiers.new('dt', 'DATA_TRANSFER'); dt.object = proxy
@@ -152,6 +496,7 @@ dt.use_vert_data = True; dt.data_types_verts = {'VGROUP_WEIGHTS'}; dt.vert_mappi
 dt.layers_vgroup_select_src = 'ALL'; dt.layers_vgroup_select_dst = 'NAME'
 bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.view_layer.objects.active = obj
 bpy.ops.object.modifier_apply(modifier='dt')
+print('WSTAGE after-transfer', sum(1 for v in obj.data.vertices if sum(g.weight for g in v.groups) < 0.01), 'of', len(obj.data.vertices))
 bpy.data.objects.remove(proxy)
 obj.parent = ro
 am = obj.modifiers.new('Armature', 'ARMATURE'); am.object = ro
@@ -160,6 +505,7 @@ bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
 bpy.ops.object.vertex_group_smooth(group_select_mode='ALL', factor=0.5, repeat=4, expand=0.0)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
 bpy.ops.object.mode_set(mode='OBJECT')
+print('WSTAGE after-smooth', sum(1 for v in obj.data.vertices if sum(g.weight for g in v.groups) < 0.01), 'of', len(obj.data.vertices))
 # Pelvis: blend thighs toward hips so leg swings don't drag the shorts outward.
 hg = obj.vertex_groups.get('hips')
 for v in obj.data.vertices:
@@ -175,19 +521,262 @@ def seg_d(p, a, b):
     return (p - (a + ab * t)).length
 chains = {s_: [(arm.bones[n + s_].head_local.copy(), arm.bones[n + s_].tail_local.copy()) for n in ('upperarm.', 'forearm.', 'hand.')] for s_ in 'LR'}
 arm_idx = {g.index: g.name for g in obj.vertex_groups if g.name.startswith(('forearm', 'hand', 'upperarm'))}
-R = 0.075 * H
+R = 0.045 * H
+# Detected arm vertices: weights come purely from the arm chain (smooth blend at elbow/wrist, chest near the armpit).
+armpit = {sgn: (arm_track[sgn][0][2] if arm_track[sgn] else Zf(0.74)) for sgn in (1, -1)}
+cg = obj.vertex_groups['chest']
 for v in obj.data.vertices:
+    sgn = int(arm_label[v.index])
+    if not sgn: continue
+    side = 'L' if sgn > 0 else 'R'
+    for gi in [g.group for g in v.groups]: obj.vertex_groups[gi].remove([v.index])   # ids first: removing invalidates element refs
+    ds = [seg_d(v.co, a, b) for a, b in chains[side]]
+    ws = [math.exp(-(dd / (0.035 * H)) ** 2) + 1e-6 for dd in ds]
+    k = 1.0
+    tot = sum(ws)
+    for n_, w_ in zip(('upperarm.', 'forearm.', 'hand.'), ws):
+        obj.vertex_groups[n_ + side].add([v.index], k * w_ / tot, 'REPLACE')
+    if k < 1: cg.add([v.index], 1 - k, 'REPLACE')
+for v in obj.data.vertices:
+    if arm_label[v.index]: continue
     for g in list(v.groups):
         if g.group in arm_idx and g.weight > 0:
             d = min(seg_d(v.co, a, b) for a, b in chains[arm_idx[g.group][-1]])
+            # Inside the torso silhouette below the armpit it is shirt, never arm.
+            inside = v.co.z < armpit[1 if v.co.x > 0 else -1] - 0.01 * H   # below the armpit and not arm: body
+            if inside: d = max(d, 2 * R)
             if d > R:
                 f = min(1.0, (d - R) / (0.5 * R)); moved = g.weight * f; g.weight -= moved
                 (hg if v.co.z < Zf(0.6) else obj.vertex_groups['chest']).add([v.index], moved, 'ADD')
+# Shoulder + sleeve (above the detected arm): chest→upperarm blend by position along the upper arm, so the sleeve
+# travels with the arm and the shoulder stretches smoothly instead of tearing.
+arm_names = {g.index for g in obj.vertex_groups if g.name.startswith(('upperarm', 'forearm', 'hand'))}
+tz_, tx_, tr_s = {}, {}, {}
+for sgn in (1, -1):
+    tr = arm_track[sgn] or [(sgn * torso_hw, 0.0, Zf(0.7), 0.03 * H)]
+    tz_[sgn] = np.array([t_[2] for t_ in tr])[::-1]; tx_[sgn] = np.array([t_[0] for t_ in tr])[::-1]; tr_s[sgn] = np.array([t_[3] for t_ in tr])[::-1]
+for sgn, side in ((1, 'L'), (-1, 'R')):
+    ub = arm.bones['upperarm.' + side]; sh_, el_ = ub.head_local, ub.tail_local
+    dir_ = (el_ - sh_).normalized(); ug = obj.vertex_groups['upperarm.' + side]; nsh = 0
+    print('TRIPO shoulder', side, 'sh z %.3f x %.3f  el z %.3f x %.3f armpit %.3f torso_hw %.3f' % ((sh_.z - mn.z) / H, sh_.x / H, (el_.z - mn.z) / H, el_.x / H, (armpit[sgn] - mn.z) / H, torso_hw / H))
+    for v in obj.data.vertices:
+        if arm_label[v.index] or v.co.x * sgn < 0.02 * H: continue
+        if not (armpit[sgn] - 0.03 * H < v.co.z < sh_.z + 0.09 * H): continue   # a loose shirt flank below the armpit is body
+        # below the armpit: lateral position against the arm's inner edge (arm and flank touch there)
+        z_ = min(max(v.co.z, tz_[sgn][0]), tz_[sgn][-1])
+        edge = np.interp(z_, tz_[sgn], tx_[sgn]) * sgn - max(np.interp(z_, tz_[sgn], tr_s[sgn]), 0.022 * H) - 0.012 * H
+        lf = min(1.0, max(0.0, (v.co.x * sgn - edge) / (0.03 * H)))
+        # above it: along the upper arm from the shoulder, and outward of the shoulder
+        t = (v.co - sh_).dot(dir_)
+        vf = min(1.0, max(0.0, (t + 0.035 * H) / (0.07 * H))) * min(1.0, max(0.0, (v.co.x * sgn - (sh_.x * sgn - 0.045 * H)) / (0.04 * H)))
+        a_ = min(1.0, max(0.0, (v.co.z - armpit[sgn]) / (0.03 * H)))
+        w = lf * (1 - a_) + vf * a_
+        w *= min(1.0, max(0.0, (0.085 * H - seg_d(v.co, sh_, el_)) / (0.03 * H)))
+        w = w * w * (3 - 2 * w)
+        if w <= 0.01: continue
+        rest_ = [(g.group, g.weight) for g in v.groups if g.group not in arm_names]
+        for gi in [g.group for g in v.groups if g.group in arm_names]: obj.vertex_groups[gi].remove([v.index])
+        tot = sum(x for _, x in rest_) or 1
+        for gi, x in rest_: obj.vertex_groups[gi].add([v.index], (1 - w) * x / tot, 'REPLACE')
+        if not rest_: cg.add([v.index], 1 - w, 'REPLACE')
+        ug.add([v.index], w, 'REPLACE'); nsh += 1
+    print('TRIPO shoulder verts', side, nsh)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
-heads = [(b.name, b.head_local) for b in arm.bones]
+heads = [(b.name, (b.head_local + b.tail_local) / 2) for b in arm.bones]
+body_heads = [h for h in heads if not h[0].startswith(('upperarm', 'forearm', 'hand'))]
+nfb = 0
 for v in obj.data.vertices:
     if sum(g.weight for g in v.groups) < 0.01:
-        obj.vertex_groups[min(heads, key=lambda h: (h[1] - v.co).length)[0]].add([v.index], 1.0, 'REPLACE')
+        pool = heads if arm_label[v.index] else body_heads   # a stray body vertex must never snap to a hand
+        obj.vertex_groups[min(pool, key=lambda h: (h[1] - v.co).length)[0]].add([v.index], 1.0, 'REPLACE'); nfb += 1
+print('TRIPO zero-weight fallbacks', nfb)
+
+# ------------------------------------------------------------------ stretch repair (safety net)
+# Pose the rig in a few test poses. Any hand/forearm-to-body edge that stretches absurdly is either a hand left
+# behind (skin, out to the side: pull the whole skin patch onto the arm) or fused geometry (cut it).
+def _Rw(axis, deg): return Matrix.Rotation(math.radians(deg), 4, axis)
+_TEST = [{'upperarm.L': _Rw('X', -75), 'forearm.L': _Rw('X', -85), 'upperarm.R': _Rw('X', 60), 'forearm.R': _Rw('X', -70)},
+         {'upperarm.R': _Rw('X', -75), 'forearm.R': _Rw('X', -85), 'upperarm.L': _Rw('X', 60), 'forearm.L': _Rw('X', -70)},
+         {'upperarm.L': _Rw('Y', -140), 'upperarm.R': _Rw('Y', 140)}]
+_rest_m = {b.name: b.matrix_local.copy() for b in arm.bones}
+def _posed(pose):
+    tot = {}
+    for b in arm.bones:
+        hd = b.head_local
+        tot[b.name] = (tot[b.parent.name] if b.parent else Matrix()) @ Matrix.Translation(hd) @ pose.get(b.name, Matrix()) @ Matrix.Translation(-hd)
+        ro.pose.bones[b.name].matrix = tot[b.name] @ _rest_m[b.name]
+        bpy.context.view_layer.update()
+    co = np.array([v.co[:] for v in obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices])
+    for pb in ro.pose.bones: pb.matrix_basis = Matrix()
+    bpy.context.view_layer.update()
+    return co
+_low_arm = {g.index for g in obj.vertex_groups if g.name.startswith(('forearm', 'hand'))}
+_all_arm = {g.index for g in obj.vertex_groups if g.name.startswith(('upperarm', 'forearm', 'hand'))}
+for _it in range(3):
+    E_ = np.array([e.vertices[:] for e in obj.data.edges]); rc = np.array([v.co[:] for v in obj.data.vertices])
+    L0_ = np.linalg.norm(rc[E_[:, 0]] - rc[E_[:, 1]], axis=1) + 1e-6
+    ratio = np.zeros(len(E_))
+    for pz in _TEST:
+        pc = _posed(pz); ratio = np.maximum(ratio, np.linalg.norm(pc[E_[:, 0]] - pc[E_[:, 1]], axis=1) / L0_)
+    lowarm = np.array([sum(g.weight for g in v.groups if g.group in _low_arm) for v in obj.data.vertices])
+    armw = np.array([sum(g.weight for g in v.groups if g.group in _all_arm) for v in obj.data.vertices])
+    bad = np.where((ratio > 3.5) & (((lowarm[E_[:, 0]] > 0.5) & (armw[E_[:, 1]] < 0.5)) | ((lowarm[E_[:, 1]] > 0.5) & (armw[E_[:, 0]] < 0.5))))[0]
+    if not len(bad): break
+    nv = len(rc); kit_ = _kit if len(_kit) == nv else np.concatenate([_kit, np.zeros(nv - len(_kit), bool)])
+    adj = [[] for _ in range(nv)]
+    for a_, b_ in E_: adj[a_].append(b_); adj[b_].append(a_)
+    pulled, cut = 0, []
+    for ei in bad:
+        a_, b_ = E_[ei]
+        if lowarm[a_] < lowarm[b_]: a_, b_ = b_, a_          # a_ = arm side, b_ = body side
+        sgn = 1 if rc[a_, 0] > 0 else -1
+        elz_ = (arm_track[sgn][0][2] + (arm_track[sgn][-1][2] - arm_track[sgn][0][2]) * 0.45) if arm_track[sgn] else Zf(0.6)
+        if not kit_[b_] and rc[b_, 0] * sgn > torso_edge(rc[b_, 2]) and armw[b_] < 0.5 and rc[b_, 2] < elz_:
+            # flood the unlabelled skin patch around b_ (a hand left behind) and give it a_'s weights
+            src = [(g.group, g.weight) for g in obj.data.vertices[a_].groups]
+            stack, seen = [b_], {b_}
+            while stack and len(seen) < 900:
+                u = stack.pop()
+                for w_ in adj[u]:
+                    if w_ not in seen and armw[w_] < 0.5 and not kit_[w_] and rc[w_, 0] * sgn > torso_edge(rc[w_, 2]) and abs(rc[w_, 2] - rc[b_, 2]) < 0.12 * H and rc[w_, 2] < elz_:
+                        seen.add(w_); stack.append(w_)
+            if len(seen) < 900:
+                for u in seen:
+                    for gi in [g.group for g in obj.data.vertices[int(u)].groups]: obj.vertex_groups[gi].remove([int(u)])
+                    for gi, w in src: obj.vertex_groups[gi].add([int(u)], w, 'REPLACE')
+                    armw[u] = 1.0
+                pulled += len(seen); continue
+        cut.append(int(ei))
+    if cut:
+        bm = bmesh.new(); bm.from_mesh(obj.data); bm.edges.ensure_lookup_table()
+        bmesh.ops.split_edges(bm, edges=[bm.edges[i] for i in cut]); bm.to_mesh(obj.data); bm.free()
+        pad = len(obj.data.vertices) - len(arm_label)
+        if pad > 0:
+            arm_label = np.concatenate([arm_label, np.zeros(pad, np.int8)]); leg_mask = np.concatenate([leg_mask, np.zeros(pad, bool)])
+    print('TRIPO stretch repair pass', _it, 'bad edges', len(bad), 'pulled', pulled, 'cut', len(cut))
+
+if '--labeldbg' in A:
+    _ai = {g.index: g.name for g in obj.vertex_groups if g.name.startswith(('upperarm', 'forearm', 'hand'))}
+    _cnt = 0
+    for v in obj.data.vertices:
+        if arm_label[v.index] or v.co.z > Zf(0.5): continue
+        aw = [(g.weight, _ai[g.group]) for g in v.groups if g.group in _ai and g.weight > 0.3]
+        if aw and _cnt < 6:
+            _cnt += 1; print('LEAK z %.3f x %.3f' % ((v.co.z - mn.z) / H, v.co.x / H), [(round(w, 2), n) for w, n in aw], 'all', [(obj.vertex_groups[g.group].name, round(g.weight, 2)) for g in v.groups])
+    lc = obj.data.color_attributes.new(name='lab', type='FLOAT_COLOR', domain='POINT')
+    ai = {g.index for g in obj.vertex_groups if g.name.startswith(('upperarm', 'forearm', 'hand'))}
+    for v in obj.data.vertices:
+        aw = sum(g.weight for g in v.groups if g.group in ai)
+        l_ = arm_label[v.index]
+        lc.data[v.index].color = (aw, 0.2 if l_ == 0 else 0.9, 0.9 if leg_mask[v.index] else (0.2 if l_ >= 0 else 0.6), 1)
+    obj.data.materials.clear()
+    lm = bpy.data.materials.new('lab'); lm.use_nodes = True; t = lm.node_tree; t.nodes.clear()
+    o2 = t.nodes.new('ShaderNodeOutputMaterial'); e = t.nodes.new('ShaderNodeEmission'); vc = t.nodes.new('ShaderNodeVertexColor'); vc.layer_name = 'lab'
+    t.links.new(vc.outputs[0], e.inputs[0]); t.links.new(e.outputs[0], o2.inputs[0]); obj.data.materials.append(lm)
+    ro.hide_render = True
+    scene.render.engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in [x.identifier for x in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items] else 'BLENDER_EEVEE'
+    scene.render.resolution_x, scene.render.resolution_y = 700, 700
+    cd = bpy.data.cameras.new('c'); cd.type = 'ORTHO'; cd.ortho_scale = H * 0.55
+    cam = bpy.data.objects.new('c', cd); scene.collection.objects.link(cam); scene.camera = cam
+    for nm, deg in (('front', 0), ('side', 90), ('back', 180)):
+        a = math.radians(deg)
+        cam.location = (math.sin(a) * 6, -math.cos(a) * 6, mn.z + H * float(arg('--labz', '0.62'))); cam.rotation_euler = (math.radians(90), 0, a)
+        scene.render.filepath = os.path.join(arg('--labeldbg'), f'{NAME}_lab_{nm}.png'); bpy.ops.render.render(write_still=True)
+    sys.exit(0)
+
+# ------------------------------------------------------------------ stress test (--stress): extreme poses → renders + stretch stats
+if '--stress' in A:
+    def Rw(axis, deg): return Matrix.Rotation(math.radians(deg), 4, axis)
+    POSES = {'rest': {},
+        'sprint': {'upperarm.L': Rw('X', -75), 'forearm.L': Rw('X', -85), 'upperarm.R': Rw('X', 60), 'forearm.R': Rw('X', -70),
+                   'thigh.L': Rw('X', -65), 'shin.L': Rw('X', 40), 'thigh.R': Rw('X', 35), 'shin.R': Rw('X', 95), 'spine': Rw('X', -12)},
+        'sprint2': {'upperarm.R': Rw('X', -75), 'forearm.R': Rw('X', -85), 'upperarm.L': Rw('X', 60), 'forearm.L': Rw('X', -70),
+                    'thigh.R': Rw('X', -65), 'shin.R': Rw('X', 40), 'thigh.L': Rw('X', 35), 'shin.L': Rw('X', 95)},
+        'armsup': {'upperarm.L': Rw('Y', -140), 'upperarm.R': Rw('Y', 140), 'forearm.L': Rw('Y', -20), 'forearm.R': Rw('Y', 20)},
+        'kick': {'thigh.R': Rw('X', -95), 'shin.R': Rw('X', 20), 'upperarm.L': Rw('Y', -70), 'upperarm.R': Rw('X', 50), 'chest': Rw('Z', 20)},
+        'tackle': {'thigh.L': Rw('X', -40), 'shin.L': Rw('X', 90), 'thigh.R': Rw('Y', 45), 'upperarm.L': Rw('Y', -60), 'upperarm.R': Rw('Y', 60), 'forearm.R': Rw('X', -60)},
+    }
+    def _align_down(side):
+        b = arm.bones['upperarm.' + side]; d = (b.tail_local - b.head_local).normalized()
+        return d.rotation_difference(Vector((0, 0, -1))).to_matrix().to_4x4()
+    # the game's pose path: arm first straightened to hang down, then raised overhead (knee-slide / sky)
+    POSES['gameup'] = {'upperarm.L': Rw('Y', -132) @ _align_down('L'), 'upperarm.R': Rw('Y', 132) @ _align_down('R'),
+                       'spine': Rw('X', 14), 'chest': Rw('X', 14)}
+    order = [b.name for b in arm.bones]  # parents precede children
+    rest = {b.name: b.matrix_local.copy() for b in arm.bones}
+    ev = lambda: np.array([v.co[:] for v in obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices])
+    rest_co = np.array([v.co[:] for v in obj.data.vertices])
+    E = np.array([e.vertices[:] for e in obj.data.edges])
+    L0 = np.linalg.norm(rest_co[E[:, 0]] - rest_co[E[:, 1]], axis=1) + 1e-6
+    gname_ = {g.index: g.name for g in obj.vertex_groups}
+    dom = [gname_[max(v.groups, key=lambda g: g.weight).group] if v.groups else '-' for v in obj.data.vertices]
+    obj.data.materials.clear()
+    pm = bpy.data.materials.new('prev'); pm.use_nodes = True
+    t = pm.node_tree; t.nodes.clear()
+    o2 = t.nodes.new('ShaderNodeOutputMaterial'); e = t.nodes.new('ShaderNodeEmission'); ti = t.nodes.new('ShaderNodeTexImage')
+    ti.image = tex; t.links.new(ti.outputs[0], e.inputs[0]); t.links.new(e.outputs[0], o2.inputs[0])
+    if '--catdbg' in A:
+        vc_ = t.nodes.new('ShaderNodeVertexColor'); vc_.layer_name = 'cat'; t.links.new(vc_.outputs[0], e.inputs[0])
+    pm.use_backface_culling = True
+    obj.data.materials.append(pm)
+    ro.hide_render = True
+    scene.render.engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in [x.identifier for x in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items] else 'BLENDER_EEVEE'
+    scene.render.resolution_x, scene.render.resolution_y = 500, 600
+    w = bpy.data.worlds.new('w'); scene.world = w; w.color = (0.25, 0.25, 0.28)
+    cd = bpy.data.cameras.new('c'); cd.type = 'ORTHO'; cd.ortho_scale = H * 1.25
+    cam = bpy.data.objects.new('c', cd); scene.collection.objects.link(cam); scene.camera = cam
+    outs = []
+    _chainL = {g.index for g in obj.vertex_groups if g.name in ('upperarm.L', 'forearm.L', 'hand.L')}
+    _foreign = []
+    for v in obj.data.vertices:
+        if arm_label[v.index] == 1:
+            fw = sum(g.weight for g in v.groups if g.group not in _chainL)
+            if fw > 0.05: _foreign.append((round(fw, 2), [(obj.vertex_groups[g.group].name, round(g.weight, 2)) for g in v.groups]))
+    print('STRESS foreign-weighted L arm verts', len(_foreign), _foreign[:3])
+    _hv = [v for v in obj.data.vertices if arm_label[v.index] == 1]
+    print('STRESS sample L arm weights', [[(obj.vertex_groups[g.group].name, round(g.weight, 2)) for g in v.groups] for v in _hv[::max(1, len(_hv) // 6)]][:6])
+    if '--catdbg' in A:
+        # colour by weight category: red = labelled arm, yellow = blended arm weight, grey = body
+        lc = obj.data.color_attributes.new(name='cat', type='FLOAT_COLOR', domain='POINT')
+        ai = {g.index for g in obj.vertex_groups if g.name.startswith(('upperarm', 'forearm', 'hand'))}
+        for v in obj.data.vertices:
+            aw = sum(g.weight for g in v.groups if g.group in ai)
+            c_ = (0.9, 0.1, 0.1) if arm_label[v.index] else ((0.9, 0.8, 0.1) if aw > 0.02 else (0.5, 0.5, 0.5))
+            lc.data[v.index].color = (*c_, 1)
+        tex_node_src = 'cat'
+    _an = {g.index for g in obj.vertex_groups if g.name.startswith(('upperarm', 'forearm', 'hand'))}
+    for zz0, zz1 in ((0.60, 0.70), (0.70, 0.78), (0.78, 0.84)):
+        sel_ = [v for v in obj.data.vertices if abs(v.co.x) < 0.07 * H and Zf(zz0) < v.co.z < Zf(zz1)]
+        aw = [sum(g.weight for g in v.groups if g.group in _an) for v in sel_]
+        print('STRESS centre z %.2f-%.2f n %d armw>0.05: %d max %.2f  labelled %d' % (zz0, zz1, len(sel_), sum(1 for a in aw if a > 0.05), max(aw) if aw else 0, sum(1 for v in sel_ if arm_label[v.index])))
+    for pname, pose in POSES.items():
+        tot = {}
+        for bn in order:
+            b = arm.bones[bn]; hd = b.head_local
+            loc = Matrix.Translation(hd) @ pose.get(bn, Matrix()) @ Matrix.Translation(-hd)
+            tot[bn] = (tot[b.parent.name] if b.parent else Matrix()) @ loc
+            ro.pose.bones[bn].matrix = tot[bn] @ rest[bn]
+            bpy.context.view_layer.update()
+        co = ev()
+        r = np.linalg.norm(co[E[:, 0]] - co[E[:, 1]], axis=1) / L0
+        bad = np.argsort(-r)[:8]
+        pairs = {}
+        for i in np.where(r > 2.0)[0]:
+            k = tuple(sorted((dom[E[i, 0]], dom[E[i, 1]]))); pairs[k] = pairs.get(k, 0) + 1
+        for i in bad[:5]:
+            a_, b_ = E[i]
+            print('   worst r %.0f  A z %.3f x %.3f lab %d %s | B z %.3f x %.3f lab %d %s' % (r[i], (rest_co[a_, 2] - mn.z) / H, rest_co[a_, 0] / H, arm_label[a_], dom[a_], (rest_co[b_, 2] - mn.z) / H, rest_co[b_, 0] / H, arm_label[b_], dom[b_]))
+        print('STRESS', pname, 'edges>2x', int((r > 2).sum()), '>4x', int((r > 4).sum()), 'max %.1f' % r.max(), sorted(pairs.items(), key=lambda x: -x[1])[:6])
+        for nm, deg in (('34', 35), ('side', 90)):
+            a = math.radians(deg)
+            cam.location = (math.sin(a) * 6, -math.cos(a) * 6, mn.z + H * 0.5)
+            cam.rotation_euler = (math.radians(90), 0, a)
+            f = os.path.join(arg('--stress'), f'{NAME}_{pname}_{nm}.png'); outs.append(f)
+            scene.render.filepath = f
+            bpy.ops.render.render(write_still=True)
+        for pb in ro.pose.bones: pb.matrix_basis = Matrix()
+        bpy.context.view_layer.update()
+    sys.exit(0)
 
 # ------------------------------------------------------------------ kit region mask = clothing zone (skeleton) × cloth colour (texture)
 gname = {g.index: g.name for g in obj.vertex_groups}
@@ -197,7 +786,9 @@ for v in obj.data.vertices:
     hh = sum(g.weight for g in v.groups if gname.get(g.group) == 'head') / tot
     val = 1.0 - min(1.0, max(0.0, (hh - 0.15) / 0.25))
     if v.co.z > Zf(0.86): val = 0.0
-    km.data[v.index].color = (val, val, val, 1)
+    aw = sum(g.weight for g in v.groups if gname.get(g.group, '').startswith(('upperarm', 'forearm', 'hand'))) / tot
+    shirt = 1.0 if (Zf(0.52) < v.co.z < Zf(0.80) and aw < 0.3) else 0.0   # torso: where A-pose arms hid the paint
+    km.data[v.index].color = (val, shirt, val, 1)
 mm = bpy.data.materials.new('maskbake'); mm.use_nodes = True
 mt = mm.node_tree; mt.nodes.clear()
 mo = mt.nodes.new('ShaderNodeOutputMaterial'); me_ = mt.nodes.new('ShaderNodeEmission'); vcn = mt.nodes.new('ShaderNodeVertexColor'); vcn.layer_name = 'kitmask'
@@ -210,7 +801,7 @@ scene.render.engine = 'CYCLES'; scene.cycles.samples = 1; scene.cycles.device = 
 bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True); bpy.context.view_layer.objects.active = obj
 scene.render.bake.margin = 8
 bpy.ops.object.bake(type='EMIT')
-zone = np.array(zimg.pixels[:], dtype=np.float32).reshape(T, T, 4)[:, :, 0]
+_zp = np.array(zimg.pixels[:], dtype=np.float32).reshape(T, T, 4); zone = _zp[:, :, 0]; shirtz = _zp[:, :, 1] > 0.5
 obj.data.materials.clear()
 for m_ in saved: obj.data.materials.append(m_)
 
@@ -252,13 +843,39 @@ def ero(m, n):
     m = m.copy()
     for _ in range(n): m &= np.roll(m, 1, 0) & np.roll(m, -1, 0) & np.roll(m, 1, 1) & np.roll(m, -1, 1)
     return m
+# Torso texels the A-pose arms covered were painted as dark smudges; they show as soon as an arm swings away.
+# Inpaint dark / grey non-kit, non-skin texels on the torso from the surrounding shirt colour.
+skinlike = (hdist(skin_h) < 0.05) & (sat > 0.12) & (mxc > 0.3)
+trim = np.zeros_like(cloth)
+if cal['yellow']: trim = ok & (hdist(cal['yellow'][0] % 1.0) < 0.05)
+_v = mxc[shirtz & cloth]
+print('TRIPO shirt value pct', [round(float(np.percentile(_v, q)), 3) for q in (1, 5, 10, 25, 50, 75)])
+bad = shirtz & ~cloth & ~skinlike & ~trim & ((mxc < 0.5) | (sat < 0.2))
+good = shirtz & cloth & ~trim
+# the kit paint is flat, so the shirt's median colour is the right fill (runtime recolour re-shades it anyway)
+fill = np.broadcast_to(np.median(rgb[good], axis=0) if good.any() else np.array([0.8, 0.1, 0.1]), rgb.shape)
+known = bad.copy()
+print('TRIPO torso smudges inpainted', int((bad & known).sum()), 'texels; unreached', int((bad & ~known).sum()))
+if (bad & known).any():
+    rgb = np.where((bad & known)[:, :, None], fill, rgb)
+    cloth |= bad & known
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, np.power((np.clip(rgb, 0, 1) + 0.055) / 1.055, 2.4)).astype(np.float32)
+    Image_out = bpy.data.images.new('out2', lin.shape[1], lin.shape[0])
+    Image_out.pixels[:] = np.dstack([lin, np.ones(lin.shape[:2], np.float32)]).ravel()
+    Image_out.filepath_raw = tex_path; Image_out.file_format = 'PNG'; Image_out.save()
+    subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '90', '-Z', '2048', tex_path, '--out', jpg], capture_output=True)
+    os.remove(tex_path)
 cloth = dil(ero(cloth, 1), 2) & (zone > 0.3)
 mask = (cloth.astype(np.float32) * np.clip(zone, 0, 1))
+# Grow the mask past UV island borders so no unrecoloured texel survives at a seam (the 'faint lines').
+# Safe: the runtime only repaints kit-coloured pixels inside the mask.
+for _ in range(10):
+    mask = np.maximum.reduce([mask, np.roll(mask, 1, 0), np.roll(mask, -1, 0), np.roll(mask, 1, 1), np.roll(mask, -1, 1)])
 mimg = bpy.data.images.new('mask', T, T, alpha=False)
 mimg.pixels[:] = np.dstack([mask, mask, mask, np.ones_like(mask)]).ravel()
 mask_path = os.path.join(OUT, NAME + '_mask.png')
 mimg.filepath_raw = mask_path; mimg.file_format = 'PNG'; mimg.save()
-subprocess.run(['sips', '-Z', '1024', '-s', 'format', 'png', '-m', '/System/Library/ColorSync/Profiles/Generic Gray Profile.icc', mask_path], capture_output=True)
+subprocess.run(['sips', '-Z', '2048', '-s', 'format', 'png', '-m', '/System/Library/ColorSync/Profiles/Generic Gray Profile.icc', mask_path], capture_output=True)
 print('TRIPO kit mask', mask_path, 'cloth texels', int(cloth.sum()))
 
 # ------------------------------------------------------------------ export (same binary format as base.bin)

@@ -11,3 +11,10 @@ art/ai3d/*_proj_*.png
 art/ai3d/*.blend
 art/ai3d/*_sheet.png
 art/ai3d/*_head_*.png
+
+# Tripo source models (≈55 MB each, re-fetchable: art/tripo/fetch.sh + projects.txt) and regenerable previews
+art/tripo/*.glb
+art/tripo/.done_*
+art/tripo/*_prev_*.png
+art/tripo/*_head_*.png
+art/ai3d/old/

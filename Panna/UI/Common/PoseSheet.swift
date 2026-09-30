@@ -99,8 +99,14 @@ enum PoseSheet {
             look.primary = c; look.socks = c; look.secondary = 0xFFFFFF; look.shorts = 0x1B2A6B
         }
         let modelName: String? = (model == "classic" || model.hasPrefix("l")) ? nil : model
-        let cell = CGSize(width: 260, height: 300)
-        for clip in clips() {
+        // QA: PANNA_POSEONE=<clip> renders just that clip's middle frame, big and close.
+        let one = ProcessInfo.processInfo.environment["PANNA_POSEONE"]
+        let cell = one == nil ? CGSize(width: 260, height: 300) : CGSize(width: 900, height: 900)
+        for var clip in clips() {
+            if let one {
+                guard clip.name == one else { continue }
+                clip = Clip(name: clip.name, frames: [clip.frames[clip.frames.count / 2]])
+            }
             // Two angles per clip: 3/4 front and side.
             var images: [UIImage] = []
             for yaw in [Float(0.6), Float(1.57)] {
@@ -114,8 +120,8 @@ enum PoseSheet {
                     for _ in 0..<40 { rig.pose(pose, dt: 1.0 / 30) }
                     let floor = SCNNode(geometry: SCNCylinder(radius: 0.9, height: 0.01)); floor.geometry?.firstMaterial?.diffuse.contents = UIColor(white: 0.25, alpha: 1)
                     scene.rootNode.addChildNode(floor)
-                    let cam = SCNNode(); cam.camera = SCNCamera(); cam.camera?.fieldOfView = 34
-                    cam.position = SCNVector3(0, 1.1, 4.4); cam.look(at: SCNVector3(0, 0.9, 0))
+                    let cam = SCNNode(); cam.camera = SCNCamera(); cam.camera?.fieldOfView = one == nil ? 34 : 24
+                    cam.position = SCNVector3(0, 1.1, 4.4); cam.look(at: SCNVector3(0, one == nil ? 0.9 : 1.2, 0))
                     scene.rootNode.addChildNode(cam)
                     let amb = SCNNode(); amb.light = SCNLight(); amb.light?.type = .ambient; amb.light?.intensity = 900
                     scene.rootNode.addChildNode(amb)
