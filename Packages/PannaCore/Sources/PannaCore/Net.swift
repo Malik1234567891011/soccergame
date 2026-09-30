@@ -141,6 +141,9 @@ public enum ClientMsg: Codable, Sendable {
     case createRoom
     case joinRoom(String)
     case startRoom
+    /// Host toggles "team up": everyone in the room on one side vs an AI crew (instead of splitting into two sides).
+    case roomTeamUp(Bool)
+    case leaveRoom
     case leaveMatch
     case leaderboard
     case ping(Double)
@@ -175,10 +178,29 @@ public struct MatchEndInfo: Codable, Sendable {
     }
 }
 
+public struct RoomMember: Codable, Sendable, Hashable {
+    public var name: String
+    public var host: Bool
+    /// Dropped connection; their seat is held for a while so switching apps (to send the code) doesn't lose it.
+    public var away: Bool
+    public init(name: String, host: Bool, away: Bool) { self.name = name; self.host = host; self.away = away }
+}
+
+public struct RoomState: Codable, Sendable {
+    public var code: String
+    public var members: [RoomMember]
+    public var youAreHost: Bool
+    public var teamUp: Bool
+    public var inMatch: Bool
+    public init(code: String, members: [RoomMember], youAreHost: Bool, teamUp: Bool, inMatch: Bool) {
+        self.code = code; self.members = members; self.youAreHost = youAreHost; self.teamUp = teamUp; self.inMatch = inMatch
+    }
+}
+
 public enum ServerMsg: Codable, Sendable {
     case welcome(rp: Int, online: Int)
     case queued(mode: OnlineMode, humans: Int, waited: Double)
-    case room(code: String, members: [String], host: Bool)
+    case room(RoomState)
     case matchStart(MatchStartInfo)
     case matchEnd(MatchEndInfo)
     case leaderboard([LeaderboardEntry])

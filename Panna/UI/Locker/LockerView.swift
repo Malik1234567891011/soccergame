@@ -360,25 +360,25 @@ struct LockerView: View {
                     // Trading card with the footballer's aura.
                     ZStack(alignment: .bottomLeading) {
                         if let img = Art.image("lookcard_" + id) ?? Art.image("look_" + id) {
-                            Image(uiImage: img).resizable().scaledToFill().frame(width: 170, height: 255).clipped()
+                            Image(uiImage: img).resizable().scaledToFill().frame(width: 150, height: 225).clipped()
                         }
                         LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom)
                         VStack(alignment: .leading, spacing: 2) {
                             RarityBadge(rarity: item.rarity)
-                            Text(item.name).font(.display(24)).foregroundStyle(.white)
+                            Text(item.name).font(.display(22)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
                         }
                         .padding(12)
                     }
-                    .frame(width: 170, height: 255)
+                    .frame(width: 150, height: 225)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(item.rarity.color, lineWidth: 2.5))
                     .shadow(color: item.rarity.color.opacity(0.6), radius: 22)
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     if lookId == nil { RarityBadge(rarity: item.rarity) }
-                    Text(item.name).font(.display(30)).foregroundStyle(.white)
+                    Text(item.name).font(.display(28)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
                     if let id = lookId, let tag = Cosmetics.lookTaglines[id] {
-                        Text(tag).font(.label(13)).italic().foregroundStyle(.white.opacity(0.85)).frame(width: 250, alignment: .leading)
+                        Text(tag).font(.label(13)).italic().foregroundStyle(.white.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
                         Text("Cosmetic — every footballer plays the same.\nYour skill decides.").font(.label(10)).foregroundStyle(.white.opacity(0.5))
                         Text("← Trying it on in your kit").font(.label(10, .black)).foregroundStyle(Theme.cyan)
                     } else {
@@ -388,11 +388,12 @@ struct LockerView: View {
                         if store.buy(item) { AudioEngine.shared.play(.reward); buying = nil; if let id = lookId { set { $0.look = id } } }
                         else { AudioEngine.shared.play(.uiBack) }
                     }
-                    .frame(width: 240)
+                    .frame(width: 230)
                     .opacity(store.p.coins >= item.price ? 1 : 0.5)
-                    if store.p.coins < item.price { Text("Not enough coins — win matches, or find it in the Daily Drop").font(.label(11)).foregroundStyle(Theme.pink) }
+                    if store.p.coins < item.price { Text("Not enough coins — win matches, or find it in the Daily Drop").font(.label(11)).foregroundStyle(Theme.pink).fixedSize(horizontal: false, vertical: true) }
                     Button("CLOSE") { closeBuy() }.font(.label(12, .black)).foregroundStyle(.white.opacity(0.6))
                 }
+                .frame(width: 250, alignment: .leading)   // fixed column: long names/lines wrap instead of widening over the stage
             }
             .padding(20)
             .background(RoundedRectangle(cornerRadius: 22).fill(Theme.panel.opacity(0.96)))

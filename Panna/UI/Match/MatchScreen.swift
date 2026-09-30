@@ -24,6 +24,7 @@ struct SceneViewHost: UIViewRepresentable {
 }
 
 struct MatchScreen: View {
+    @EnvironmentObject var app: AppModel
     @ObservedObject var controller: MatchController
     var onQuit: () -> Void
     @State private var showMenu = false
@@ -44,6 +45,9 @@ struct MatchScreen: View {
                 VersusCard(controller: controller)
                     .transition(.asymmetric(insertion: .identity, removal: .move(edge: .top).combined(with: .opacity)))
                     .zIndex(10)
+            }
+            if !controller.driver.allowsTimeWarp {
+                OnlineReconnectBanner(client: app.online).allowsHitTesting(false)
             }
             if showMenu {
                 PauseOverlay(online: !controller.driver.allowsTimeWarp, onResume: { controller.paused = false; showMenu = false }, onQuit: onQuit)
@@ -365,6 +369,25 @@ struct CutInView: View {
         .onAppear {
             AudioEngine.shared.play(.flow, volume: 0.8)
             withAnimation(.linear(duration: 1.2)) { t = 1 }
+        }
+    }
+}
+
+/// Online match lost its socket: say so while the client reconnects (the server holds the seat and resends the match).
+struct OnlineReconnectBanner: View {
+    @ObservedObject var client: OnlineClient
+    var body: some View {
+        if client.status == .reconnecting || client.status == .offline {
+            VStack {
+                HStack(spacing: 8) {
+                    ProgressView().tint(.white)
+                    Text(client.status == .offline ? "CONNECTION LOST" : "RECONNECTING…").font(.label(13, .black)).foregroundStyle(.white)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 9)
+                .background(Capsule().fill(Color.black.opacity(0.7)))
+                .padding(.top, 60)
+                Spacer()
+            }
         }
     }
 }

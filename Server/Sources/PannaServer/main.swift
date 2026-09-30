@@ -126,6 +126,8 @@ final class Session {
     var roomCode: String?
     weak var match: ServerMatch?
     var slot = -1
+    /// A newer connection from the same player took over (app came back from the background).
+    var replaced = false
 
     init(ws: WebSocket) { self.ws = ws }
     func send(_ m: ServerMsg) { ws.send(NetCodec.encode(m)) }
@@ -133,11 +135,18 @@ final class Session {
     var name: String { hello?.name ?? "Player" }
 }
 
+/// A private room lives until everyone has left: it survives matches (rematch in the same room) and short
+/// disconnects (members are player ids, and a dropped member's place is held for `awayGrace`).
 struct Room {
     var code: String
-    var host: UUID
-    var members: [UUID]
+    var host: String            // player id
+    var members: [String]       // player ids, join order
+    var away: [String: Date] = [:]
+    var teamUp = false
+    var inMatch = false
 }
+let awayGrace: TimeInterval = 90
+
 
 // MARK: - Match
 
@@ -148,12 +157,18 @@ final class ServerMatch {
     let info: (home: TeamInfo, away: TeamInfo)
     var seats: [Int: Session] = [:]          // slot → session
     var inputs: [Int: InputFrame] = [:]
+    /// Buttons seen in any packet since the last tick. Several packets can land between two ticks on a jittery
+    /// connection; keeping only the newest would silently drop a one-frame tap (pass/shoot/skill).
+    var latched: [Int: InputButtons] = [:]
     var acks: [UInt32] = Array(repeating: 0, count: 8)
     var pendingEvents: [MatchEvent] = []
     var timer: DispatchSourceTimer?
     var finished = false
     weak var mm: Matchmaker?
     let theme: String
+    var roomCode: String?
+    /// Seats whose player dropped (not forfeited): they can reclaim it by reconnecting. playerId → slot
+    var held: [String: Int] = [:]
 
     init(mode: OnlineMode, home: [Session], away: [Session], mm: Matchmaker, aiSkill: Float) {
         self.mode = mode
@@ -208,7 +223,10 @@ final class ServerMatch {
 
     func tick() {
         guard !finished else { return }
-        sim.step(inputs: inputs)
+        var frame = inputs
+        for (slot, b) in latched { frame[slot]?.buttons.formUnion(b) }
+        latched.removeAll(keepingCapacity: true)
+        sim.step(inputs: frame)
         pendingEvents += sim.drainEvents().map { $0.event }
         if sim.state.tick % 2 == 0 {
             let snap = SnapshotCodec.encode(sim.state, events: pendingEvents, ackSeq: acks)
@@ -221,16 +239,27 @@ final class ServerMatch {
 
     func input(_ s: Session, _ f: InputFrame, seq: UInt32) {
         guard s.slot >= 0 else { return }
-        if seq >= acks[s.slot] { acks[s.slot] = seq; inputs[s.slot] = f }
+        if seq >= acks[s.slot] { acks[s.slot] = seq; inputs[s.slot] = f; latched[s.slot, default: []].formUnion(f.buttons) }
     }
 
-    func drop(_ s: Session) {
+    func drop(_ s: Session, forfeit: Bool = false) {
         guard s.slot >= 0 else { return }
+        if !forfeit, !finished, let pid = s.hello?.playerId { held[pid] = s.slot }
         seats[s.slot] = nil
         inputs[s.slot] = nil
+        latched[s.slot] = nil
         sim.setHuman(s.slot, false)   // a bot takes over the seat
         s.match = nil
         s.slot = -1
+    }
+
+    /// A player who dropped mid-match reconnected: give them their seat back and resend the start info.
+    func rejoin(_ s: Session, slot: Int) {
+        guard !finished else { return }
+        seats[slot] = s; s.slot = slot; s.match = self
+        sim.setHuman(slot, true)
+        acks[slot] = 0
+        s.send(.matchStart(MatchStartInfo(matchId: id, you: slot, mode: mode, theme: theme, rules: sim.rules, home: info.0, away: info.1)))
     }
 
     func finish() {
@@ -265,6 +294,7 @@ final class ServerMatch {
         }
         mm?.store.flush()
         mm?.matchEnded(self)
+        if let code = roomCode { mm?.roomMatchEnded(code) }
     }
 }
 
@@ -310,9 +340,34 @@ final class Matchmaker {
     }
 
     func disconnect(_ s: Session) {
-        s.match?.drop(s)
-        leaveRoom(s)
         sessions[s.id] = nil
+        if s.replaced { return }   // the player's new connection already took over room and seat
+        s.match?.drop(s)
+        // Hold their room place for a while: switching apps to send the code must not kick you out.
+        if let c = s.roomCode, var room = rooms[c], let pid = s.hello?.playerId {
+            room.away[pid] = Date()
+            rooms[c] = room
+            broadcastRoom(c)
+        }
+    }
+
+    func session(_ pid: String) -> Session? { sessions.values.first { $0.hello?.playerId == pid && !$0.replaced } }
+
+    /// Reconnect: take over from any stale connection, then rejoin the room and a running match seat.
+    func reattach(_ s: Session, pid: String) {
+        for old in sessions.values where old !== s && old.hello?.playerId == pid {
+            old.replaced = true
+            old.match?.drop(old)
+            old.ws.close(promise: nil)
+        }
+        if let (code, _) = rooms.first(where: { $0.value.members.contains(pid) }) {
+            rooms[code]?.away[pid] = nil
+            s.roomCode = code
+            broadcastRoom(code)
+        }
+        if let m = matches.values.first(where: { $0.held[pid] != nil }), let slot = m.held.removeValue(forKey: pid) {
+            m.rejoin(s, slot: slot)
+        }
     }
 
     func handle(_ s: Session, _ text: String) {
@@ -325,6 +380,7 @@ final class Matchmaker {
             store.flush()
             s.send(.welcome(rp: r.rp, online: sessions.count))
             s.send(.crew(crewInfo(for: h.playerId)))
+            reattach(s, pid: h.playerId)
         case .queue(let mode):
             guard s.hello != nil, s.match == nil else { return }
             s.queue = mode
@@ -333,31 +389,48 @@ final class Matchmaker {
         case .cancel:
             s.queue = nil
         case .createRoom:
+            guard let pid = s.hello?.playerId else { return }
             leaveRoom(s)
             var code = ""
             repeat { code = String((0..<4).map { _ in "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".randomElement()! }) } while rooms[code] != nil
-            rooms[code] = Room(code: code, host: s.id, members: [s.id])
+            rooms[code] = Room(code: code, host: pid, members: [pid])
             s.roomCode = code
             broadcastRoom(code)
         case .joinRoom(let code):
-            let c = code.uppercased()
+            guard let pid = s.hello?.playerId else { return }
+            let c = code.uppercased().trimmingCharacters(in: .whitespaces)
             guard var room = rooms[c] else { s.send(.error("Room \(c) not found")); return }
+            if s.roomCode == c { broadcastRoom(c); return }
             guard room.members.count < 6 else { s.send(.error("Room is full")); return }
+            guard !room.inMatch else { s.send(.error("Room \(c) is mid-match — try again when it ends")); return }
             leaveRoom(s)
-            room.members.append(s.id)
+            room.members.append(pid)
             rooms[c] = room
             s.roomCode = c
             broadcastRoom(c)
+        case .roomTeamUp(let on):
+            guard let c = s.roomCode, rooms[c]?.host == s.hello?.playerId else { return }
+            rooms[c]?.teamUp = on
+            broadcastRoom(c)
+        case .leaveRoom:
+            leaveRoom(s)
         case .startRoom:
-            guard let c = s.roomCode, let room = rooms[c], room.host == s.id else { return }
-            let members = room.members.compactMap { sessions[$0] }
+            guard let c = s.roomCode, let room = rooms[c], room.host == s.hello?.playerId, !room.inMatch else { return }
+            let members = room.members.filter { room.away[$0] == nil }.compactMap { session($0) }.filter { $0.match == nil }
+            guard !members.isEmpty else { return }
             var home: [Session] = [], away: [Session] = []
-            for (i, m) in members.enumerated() { (i % 2 == 0 ? { home.append(m) } : { away.append(m) })() }
-            rooms[c] = nil
-            for m in members { m.roomCode = nil }
-            startMatch(.room, home: home, away: away, aiSkill: 0.55)
+            if room.teamUp {
+                home = Array(members.prefix(3)); away = []
+            } else {
+                for (i, m) in members.enumerated() { (i % 2 == 0 ? { home.append(m) } : { away.append(m) })() }
+            }
+            rooms[c]?.inMatch = true
+            // Team up: an AI crew that scales with how many of you there are. Versus: bots only fill empty seats.
+            let m = startMatch(.room, home: home, away: away, aiSkill: room.teamUp ? 0.55 + 0.08 * Float(home.count) : 0.55)
+            m.roomCode = c
+            broadcastRoom(c)
         case .leaveMatch:
-            s.match?.drop(s)
+            s.match?.drop(s, forfeit: true)
         case .leaderboard:
             s.send(.leaderboard(store.top(50)))
         case .ping(let t):
@@ -394,26 +467,43 @@ final class Matchmaker {
     }
 
     func leaveRoom(_ s: Session) {
-        guard let c = s.roomCode, var room = rooms[c] else { return }
-        room.members.removeAll { $0 == s.id }
+        guard let c = s.roomCode, let pid = s.hello?.playerId else { return }
         s.roomCode = nil
+        removeMember(pid, from: c)
+    }
+
+    func removeMember(_ pid: String, from c: String) {
+        guard var room = rooms[c] else { return }
+        room.members.removeAll { $0 == pid }
+        room.away[pid] = nil
         if room.members.isEmpty { rooms[c] = nil; return }
-        if room.host == s.id { room.host = room.members[0] }
+        if room.host == pid { room.host = room.members.first { room.away[$0] == nil } ?? room.members[0] }
         rooms[c] = room
         broadcastRoom(c)
     }
 
     func broadcastRoom(_ c: String) {
         guard let room = rooms[c] else { return }
-        let names = room.members.compactMap { sessions[$0]?.name }
-        for id in room.members { sessions[id]?.send(.room(code: c, members: names, host: id == room.host)) }
+        let list = room.members.map { pid in
+            RoomMember(name: session(pid)?.name ?? store.records[pid]?.name ?? "Player", host: pid == room.host, away: room.away[pid] != nil)
+        }
+        for pid in room.members {
+            session(pid)?.send(.room(RoomState(code: c, members: list, youAreHost: pid == room.host, teamUp: room.teamUp, inMatch: room.inMatch)))
+        }
     }
 
-    func startMatch(_ mode: OnlineMode, home: [Session], away: [Session], aiSkill: Float) {
+    func roomMatchEnded(_ c: String) {
+        rooms[c]?.inMatch = false
+        broadcastRoom(c)
+    }
+
+    @discardableResult
+    func startMatch(_ mode: OnlineMode, home: [Session], away: [Session], aiSkill: Float) -> ServerMatch {
         let m = ServerMatch(mode: mode, home: home, away: away, mm: self, aiSkill: aiSkill)
         matches[m.id] = m
         m.start()
         print("match \(m.id) \(mode) \(home.count)v\(away.count)")
+        return m
     }
 
     func matchEnded(_ m: ServerMatch) { matches[m.id] = nil }
@@ -427,6 +517,11 @@ final class Matchmaker {
     /// Queue rules: fill with humans when possible, never make anyone wait long — bots fill the rest.
     func tick() {
         let now = Date()
+        // Room members who never came back lose their place.
+        for (c, room) in rooms {
+            for (pid, t) in room.away where now.timeIntervalSince(t) > awayGrace { removeMember(pid, from: c) }
+        }
+        // Held match seats expire when the match ends (the ServerMatch goes away with them).
         for mode in [OnlineMode.ranked, .duel, .coop] {
             var q = sessions.values.filter { $0.queue == mode && $0.match == nil }.sorted { $0.queuedAt < $1.queuedAt }
             let waited = q.first.map { now.timeIntervalSince($0.queuedAt) } ?? 0
