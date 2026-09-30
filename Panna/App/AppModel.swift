@@ -152,7 +152,7 @@ final class AppModel: ObservableObject {
         case .tutorial:
             aiSkill = 0.08
             oppName = "Night Shift"
-            rules.duration = 180
+            rules.duration = 150
             rules.goalsToWin = 3
             venue = .cage
         default:
@@ -435,8 +435,21 @@ struct RootView: View {
             switch app.screen {
             case .home: HomeView()
             case .locker: LockerView()
-            case .squad: SquadView()
-            case .scout: ScoutView()
+            case .squad: SquadView().overlay {
+                TipCard(key: "squad", icon: "link", title: "YOUR SQUAD & BONDS", lines: [
+                    "Prospects are footballers you recruit in Scout. Two of them play alongside you every match.",
+                    "Set up goals together — assist them or finish their passes — to build a BOND.",
+                    "Every bond level makes them play better with you, from STRANGERS up to LEGENDARY DUO.",
+                    "Swap who's in your squad any time.",
+                ], accent: Theme.purple)
+            }
+            case .scout: ScoutView().overlay {
+                TipCard(key: "scout", icon: "sparkles", title: "SCOUT", lines: [
+                    "Spend gems to recruit Prospects, plus new Moves, Finishes and Traits.",
+                    "The odds for every rarity are shown before you pull — no surprises.",
+                    "Pulling someone you already have levels them up instead.",
+                ], accent: Theme.gold)
+            }
             case .career: CareerView()
             case .profile: ProfileView()
             case .shop: ShopView()
@@ -451,7 +464,7 @@ struct RootView: View {
                     MatchScreen(controller: m, onQuit: { app.finishMatch(forfeit: true) })
                         .onReceive(m.$finished) { done in if done { app.finishMatch() } }
                         .overlay(alignment: .top) {
-                            if case .tutorial = app.pending?.mode { TutorialCoach(controller: m) }
+                            if case .tutorial = app.pending?.mode { TutorialCoach(controller: m, onSkip: { app.finishMatch(forfeit: false) }) }
                         }
                 }
             }

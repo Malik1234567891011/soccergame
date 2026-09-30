@@ -246,6 +246,8 @@ struct Profile: Codable {
     var tripoPreviewGranted = false
     /// Chemistry with each Prospect: goals you create together (you assist them or they assist you).
     var bonds: [String: Int] = [:]
+    /// First-time explainer cards the player has dismissed (TipCard keys).
+    var seenTips: Set<String> = []
     var momentStars: [String: Int] = [:]
     var passPremium = false
     var passPremiumClaimed: Set<Int> = []

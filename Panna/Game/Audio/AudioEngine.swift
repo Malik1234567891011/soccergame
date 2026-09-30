@@ -44,7 +44,8 @@ final class AudioEngine {
     func start() {
         guard !started else { return }
         started = true
-        try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+        // .playback plays with the ring/silent switch on silent (players expected sound); mixWithOthers keeps their music going.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
         for _ in 0..<14 {
             let n = AVAudioPlayerNode()

@@ -7,6 +7,12 @@ public final class MatchSim {
     public static let gravity: Float = 12.0
 
     public private(set) var state = MatchState()
+
+    /// Tutorial: fill a player's FLOW bar so the lesson can be tried on the spot.
+    public func grantHype(_ player: Int, to value: Float) {
+        guard player >= 0 && player < state.players.count else { return }
+        state.players[player].hype = max(state.players[player].hype, value)
+    }
     public let rules: MatchRules
     public let geo: ArenaGeometry
     public let teams: [TeamSetup]

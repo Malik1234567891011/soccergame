@@ -64,6 +64,13 @@ struct LockerView: View {
                 Spacer()
             }
             if let item = buying { buySheet(item) }
+            if tab == 5 {
+                TipCard(key: "moves", icon: "figure.soccer", title: "MOVES, FINISHES & TRAITS", lines: [
+                    "Your WEAPON sets your playstyle and your FLOW super. Change it any time.",
+                    "Skill moves, finishes, traits and celebrations come from Scout cards, each inspired by a legend.",
+                    "Tap any of them to see its card and exactly what it does, then EQUIP it.",
+                ], accent: Theme.green)
+            }
         }
         .onAppear {
             draft = store.p.appearance
@@ -104,12 +111,27 @@ struct LockerView: View {
 
     /// Picks an option or opens the purchase sheet when locked.
     func pick(_ id: String, _ change: @escaping (inout Appearance) -> Void) {
-        if store.p.owns(id) || Cosmetics.item(id) == nil { set(change) } else {
+        if store.p.owns(id) || Cosmetics.item(id) == nil {
+            set(change)
+            // Owned footballers: equipping also shows their card (the collectible art is the fun part).
+            if id.hasPrefix("look."), let item = Cosmetics.item(id) { buying = item }
+        } else {
             buying = Cosmetics.item(id)
             if id.hasPrefix("look.") {   // try it on: preview on the stage without equipping
                 var preview = draft; change(&preview)
                 stage.setCharacters([(preview, store.p.name)])
             }
+        }
+    }
+
+    /// Common → legendary; within a rarity, the ones you own first.
+    var sortedLooks: [String] {
+        Catalog.looks.sorted { a, b in
+            let ra = Cosmetics.item("look." + a)?.rarity ?? .common, rb = Cosmetics.item("look." + b)?.rarity ?? .common
+            if ra != rb { return ra < rb }
+            let oa = store.p.owns("look." + a), ob = store.p.owns("look." + b)
+            if oa != ob { return oa }
+            return (Cosmetics.lookNames[a] ?? a) < (Cosmetics.lookNames[b] ?? b)
         }
     }
 
@@ -119,7 +141,7 @@ struct LockerView: View {
         VStack(alignment: .leading, spacing: 12) {
             if !Catalog.looks.isEmpty {
                 section("FOOTBALLER") {
-                    ForEach(Catalog.looks, id: \.self) { id in
+                    ForEach(sortedLooks, id: \.self) { id in
                         let cid = "look.\(id)"
                         let owned = store.p.owns(cid)
                         let rarity = Cosmetics.item(cid)?.rarity ?? .common
@@ -380,10 +402,17 @@ struct LockerView: View {
                     if let id = lookId, let tag = Cosmetics.lookTaglines[id] {
                         Text(tag).font(.label(13)).italic().foregroundStyle(.white.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
                         Text("Cosmetic — every footballer plays the same.\nYour skill decides.").font(.label(10)).foregroundStyle(.white.opacity(0.5))
-                        Text("← Trying it on in your kit").font(.label(10, .black)).foregroundStyle(Theme.cyan)
+                        if !store.p.owns(item.id) { Text("← Trying it on in your kit").font(.label(10, .black)).foregroundStyle(Theme.cyan) }
                     } else {
-                        Text("Unlock for your locker").font(.label(13)).foregroundStyle(.white.opacity(0.7))
+                        Text(store.p.owns(item.id) ? "One of your footballers." : "Unlock for your locker").font(.label(13)).foregroundStyle(.white.opacity(0.7))
                     }
+                    if store.p.owns(item.id) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.green)
+                            Text(draft.look == lookId ? "EQUIPPED — it's yours" : "It's yours").font(.label(13, .black)).foregroundStyle(.white)
+                        }
+                        Button("CLOSE") { closeBuy() }.font(.label(12, .black)).foregroundStyle(.white.opacity(0.6))
+                    } else {
                     GlowButton(title: "UNLOCK · \(item.price)", icon: "circle.hexagongrid.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 52) {
                         if store.buy(item) { AudioEngine.shared.play(.reward); buying = nil; if let id = lookId { set { $0.look = id } } }
                         else { AudioEngine.shared.play(.uiBack) }
@@ -392,6 +421,7 @@ struct LockerView: View {
                     .opacity(store.p.coins >= item.price ? 1 : 0.5)
                     if store.p.coins < item.price { Text("Not enough coins — win matches, or find it in the Daily Drop").font(.label(11)).foregroundStyle(Theme.pink).fixedSize(horizontal: false, vertical: true) }
                     Button("CLOSE") { closeBuy() }.font(.label(12, .black)).foregroundStyle(.white.opacity(0.6))
+                    }
                 }
                 .frame(width: 250, alignment: .leading)   // fixed column: long names/lines wrap instead of widening over the stage
             }
@@ -405,7 +435,10 @@ struct LockerView: View {
 
 struct MovesTab: View {
     @EnvironmentObject var store: ProfileStore
+    @EnvironmentObject var app: AppModel
     @ObservedObject var stage: CharacterStage
+    /// Tapped move/finish/trait/celebration: shows its card (what it does) with Equip.
+    @State private var inspecting: (effect: LegacyEffect, apply: (LegacyEffect) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -441,6 +474,67 @@ struct MovesTab: View {
                 if case .celebration(let c) = e { store.p.celebration = c.rawValue; stage.animation = .celebrate }
             }
         }
+        .fullScreenCover(isPresented: Binding(get: { inspecting != nil }, set: { if !$0 { inspecting = nil } })) {
+            if let i = inspecting { moveSheet(i.effect, apply: i.apply).presentationBackground(.clear) }
+        }
+    }
+
+    /// The card you got when you pulled it, plus what it does and Equip.
+    func moveSheet(_ e: LegacyEffect, apply: @escaping (LegacyEffect) -> Void) -> some View {
+        let owned = store.p.owns(effect: e)
+        let card = Catalog.legacy(for: e)
+        let equipped = isEquipped(e)
+        return ZStack {
+            Color.black.opacity(0.75).ignoresSafeArea().onTapGesture { inspecting = nil }
+            HStack(spacing: 24) {
+                if let card { LegacyCardView(card: card, width: 190, owned: owned) }
+                VStack(alignment: .leading, spacing: 10) {
+                    if let card { RarityBadge(rarity: card.rarity) }
+                    Text(card?.title ?? defaultName(e)).font(.display(30)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
+                    Text((card?.slotName ?? slotLabel(e)) + (card.map { " · inspired by " + $0.legend } ?? "")).font(.label(11, .black)).foregroundStyle(.white.opacity(0.6))
+                    Text(card?.blurb ?? defaultBlurb(e)).font(.label(13)).foregroundStyle(.white.opacity(0.88)).fixedSize(horizontal: false, vertical: true)
+                    if owned {
+                        GlowButton(title: equipped ? "EQUIPPED" : "EQUIP", icon: equipped ? "checkmark" : "hand.tap.fill", height: 48) {
+                            apply(e); store.save(); inspecting = nil
+                        }
+                        .frame(width: 220)
+                        .opacity(equipped ? 0.6 : 1)
+                    } else {
+                        Text("Not yours yet — pull it in SCOUT.").font(.label(12, .black)).foregroundStyle(Theme.gold)
+                        GlowButton(title: "GO TO SCOUT", icon: "sparkles", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 44) {
+                            inspecting = nil; app.go(.scout)
+                        }
+                        .frame(width: 220)
+                    }
+                    Button("CLOSE") { inspecting = nil }.font(.label(12, .black)).foregroundStyle(.white.opacity(0.6))
+                }
+                .frame(width: 320, alignment: .leading)
+            }
+            .padding(24)
+            .background(RoundedRectangle(cornerRadius: 22).fill(Theme.panel.opacity(0.97)))
+        }
+    }
+
+    func isEquipped(_ e: LegacyEffect) -> Bool {
+        switch e {
+        case .skill(let s): return store.p.loadout.skill == s
+        case .shot(let s): return store.p.loadout.shot == s
+        case .trait(let t): return store.p.loadout.trait == t
+        case .celebration(let c): return store.p.celebration == c.rawValue
+        }
+    }
+
+    func slotLabel(_ e: LegacyEffect) -> String {
+        switch e { case .skill: return "SKILL MOVE"; case .shot: return "FINISH"; case .trait: return "TRAIT"; case .celebration: return "CELEBRATION" }
+    }
+
+    func defaultBlurb(_ e: LegacyEffect) -> String {
+        switch e {
+        case .skill: return "The classic step over: a quick feint that sends a defender the wrong way. Everyone starts with it."
+        case .trait: return "No trait equipped. Unlock traits in Scout for a passive edge — better curve, first touches, last-ditch tackles."
+        case .celebration: return "Slide in on your knees in front of the crowd."
+        default: return ""
+        }
     }
 
     func weaponBlurb(_ p: Playstyle) -> String {
@@ -461,9 +555,8 @@ struct MovesTab: View {
                     let owned = store.p.owns(effect: e)
                     let card = Catalog.legacy(for: e)
                     Button {
-                        guard owned else { AudioEngine.shared.play(.uiBack); return }
-                        apply(e); store.save()
                         AudioEngine.shared.play(.uiTap)
+                        inspecting = (e, apply)
                     } label: {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(card?.title ?? defaultName(e)).font(.label(11, .black))

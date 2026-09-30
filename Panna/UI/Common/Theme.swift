@@ -85,8 +85,8 @@ struct GlowButton: View {
             HStack(spacing: 10) {
                 if let i = icon { Image(systemName: i).font(.system(size: height * 0.34, weight: .black)) }
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(title).font(.display(height * 0.38))
-                    if let s = subtitle { Text(s).font(.label(height * 0.2)).opacity(0.75) }
+                    Text(title).font(.display(height * 0.38)).lineLimit(1).minimumScaleFactor(0.55)   // never wrap or truncate
+                    if let s = subtitle { Text(s).font(.label(height * 0.2)).opacity(0.75).lineLimit(1).minimumScaleFactor(0.6) }
                 }
             }
             .foregroundStyle(textColor)

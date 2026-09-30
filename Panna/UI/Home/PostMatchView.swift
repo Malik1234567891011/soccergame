@@ -116,7 +116,7 @@ struct PostMatchView: View {
                     Spacer()
                     HStack(spacing: 12) {
                         GlowButton(title: primaryTitle, icon: isTutorial ? "person.fill" : "arrow.clockwise", height: 58) { if isTutorial { app.leavePostMatch() } else { app.rematch() } }
-                            .frame(width: 230)
+                            .frame(width: isTutorial ? 330 : 230)
                         if !isTutorial, let m = app.match, !m.highlights.isEmpty {
                             Button { showClip = true } label: {
                                 Label("CLIP IT", systemImage: "film.stack").font(.display(16)).foregroundStyle(.black)

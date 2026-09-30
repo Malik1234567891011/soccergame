@@ -331,7 +331,7 @@ for sgn in (1, -1):
     cand_ |= (vs[:, 2] < tz[0] + 0.02 * H) & (np.linalg.norm(vs - _end, axis=1) < 0.15 * H) & (vs[:, 0] * sgn > 0.05 * H)
     cand_ &= (vs[:, 2] < tz[-1] - 0.05 * H) & ~leg_mask
     _cz = np.clip(vs[:, 2], tz[0], tz[-1])
-    cand_ &= vs[:, 0] * sgn > np.interp(_cz, tz, tx) * sgn - np.maximum(np.interp(_cz, tz, tr_), 0.022 * H) * 1.3   # never medial of the arm
+    cand_ &= vs[:, 0] * sgn > np.interp(_cz, tz, tx) * sgn - np.clip(np.interp(_cz, tz, tr_), 0.022 * H, 1.25 * float(np.median(tr_))) * 1.15   # never medial of the arm
     ev_ = np.array([e.vertices[:] for e in obj.data.edges])
     from mathutils.kdtree import KDTree
     for _round in range(6):
@@ -399,7 +399,9 @@ for sgn in (1, -1):
     tz = np.array([t_[2] for t_ in tr])[::-1]; tx = np.array([t_[0] for t_ in tr])[::-1]; trr = np.array([t_[3] for t_ in tr])[::-1]
     idx = np.where(arm_label == sgn)[0]
     cz = np.clip(vs[idx, 2], tz[0], tz[-1])
-    inner = np.interp(cz, tz, tx) * sgn - np.maximum(np.interp(cz, tz, trr), 0.022 * H) * 1.5 - 0.006 * H
+    # arm thickness: a section merged with the chest inflates r, so cap it near the arm's typical radius
+    r_cap = np.clip(np.interp(cz, tz, trr), 0.022 * H, 1.25 * float(np.median(trr)))
+    inner = np.interp(cz, tz, tx) * sgn - r_cap * 1.15 - 0.004 * H
     bad = (vs[idx, 0] * sgn < inner) | (vs[idx, 2] > tz[-1] - 0.05 * H)   # the contact band under the armpit is blended, not cut
     arm_label[idx[bad]] = 0
     print('TRIPO arm bound side', sgn, 'unlabelled', int(bad.sum()))
@@ -417,6 +419,27 @@ for sgn in (1, -1):
     bad_ = (arm_label == sgn) & _kit & (vs[:, 2] < elz)
     arm_label[bad_] = 0
     print('TRIPO kit guard side', sgn, 'unlabelled', int(bad_.sum()))
+# Athletic-fit sleeves: generated jerseys often have wide baggy sleeves that swing out like wings with the arm.
+# Pull sleeve (kit-coloured arm) vertices in toward the arm's axis so the sleeve hugs the upper arm.
+_moved = 0
+_co = [v.co.copy() for v in obj.data.vertices]
+for sgn in (1, -1):
+    tr = arm_track[sgn]
+    if len(tr) < 4: continue
+    tz_a = np.array([t_[2] for t_ in tr])[::-1]; tx_a = np.array([t_[0] for t_ in tr])[::-1]; ty_a = np.array([t_[1] for t_ in tr])[::-1]
+    rr_a = np.array([t_[3] for t_ in tr])[::-1]
+    r_arm = float(np.percentile(rr_a, 30))            # bare-arm radius
+    cap = max(r_arm * 1.35, 0.026 * H)
+    for i in np.where((arm_label == sgn) & _kit)[0]:
+        z_ = min(max(vs[i, 2], tz_a[0]), tz_a[-1])
+        cx, cy = np.interp(z_, tz_a, tx_a), np.interp(z_, tz_a, ty_a)
+        dx, dy = vs[i, 0] - cx, vs[i, 1] - cy
+        d = math.hypot(dx, dy)
+        if d > cap:
+            f = cap / d
+            obj.data.vertices[i].co.x = cx + dx * f; obj.data.vertices[i].co.y = cy + dy * f; _moved += 1
+vs = np.array([v.co[:] for v in obj.data.vertices])
+print('TRIPO sleeves tightened', _moved, 'verts')
 # Rip the surface where arm meets body below the armpit (hands/arms touching the torso or shorts in the source):
 # each face goes wholly to one side, so nothing is ever stretched between a swinging arm and the body.
 _ap = {sgn: (arm_track[sgn][0][2] if arm_track[sgn] else Zf(0.74)) for sgn in (1, -1)}
@@ -561,7 +584,7 @@ for sgn, side in ((1, 'L'), (-1, 'R')):
     print('TRIPO shoulder', side, 'sh z %.3f x %.3f  el z %.3f x %.3f armpit %.3f torso_hw %.3f' % ((sh_.z - mn.z) / H, sh_.x / H, (el_.z - mn.z) / H, el_.x / H, (armpit[sgn] - mn.z) / H, torso_hw / H))
     for v in obj.data.vertices:
         if arm_label[v.index] or v.co.x * sgn < 0.02 * H: continue
-        if not (armpit[sgn] - 0.03 * H < v.co.z < sh_.z + 0.09 * H): continue   # a loose shirt flank below the armpit is body
+        if not (armpit[sgn] < v.co.z < sh_.z + 0.09 * H): continue   # below the armpit, anything that isn't arm is body
         # below the armpit: lateral position against the arm's inner edge (arm and flank touch there)
         z_ = min(max(v.co.z, tz_[sgn][0]), tz_[sgn][-1])
         edge = np.interp(z_, tz_[sgn], tx_[sgn]) * sgn - max(np.interp(z_, tz_[sgn], tr_s[sgn]), 0.022 * H) - 0.012 * H
@@ -570,7 +593,7 @@ for sgn, side in ((1, 'L'), (-1, 'R')):
         t = (v.co - sh_).dot(dir_)
         vf = min(1.0, max(0.0, (t + 0.035 * H) / (0.07 * H))) * min(1.0, max(0.0, (v.co.x * sgn - (sh_.x * sgn - 0.045 * H)) / (0.04 * H)))
         a_ = min(1.0, max(0.0, (v.co.z - armpit[sgn]) / (0.03 * H)))
-        w = lf * (1 - a_) + vf * a_
+        w = vf * a_   # no lateral blend below/at the armpit: on broad chests the flank overlaps the arm in x (the 'jersey wing')
         w *= min(1.0, max(0.0, (0.085 * H - seg_d(v.co, sh_, el_)) / (0.03 * H)))
         w = w * w * (3 - 2 * w)
         if w <= 0.01: continue
@@ -581,6 +604,29 @@ for sgn, side in ((1, 'L'), (-1, 'R')):
         if not rest_: cg.add([v.index], 1 - w, 'REPLACE')
         ug.add([v.index], w, 'REPLACE'); nsh += 1
     print('TRIPO shoulder verts', side, nsh)
+# Flank under the arm: a broad, smooth share of upper-arm weight that fades out toward the waist. With the sleeve
+# fused to the flank in generated meshes, a hard arm/body boundary fans into a 'wing' when the arm lifts; spreading
+# the transition makes the shirt ride up with the arm like real fabric instead.
+nfl = 0
+for sgn, side in ((1, 'L'), (-1, 'R')):
+    ug = obj.vertex_groups['upperarm.' + side]
+    ap = armpit[sgn]
+    for v in obj.data.vertices:
+        if arm_label[v.index] or v.co.x * sgn < 0.03 * H: continue
+        dz = ap - v.co.z
+        if dz < -0.01 * H or dz > 0.22 * H: continue
+        edge = torso_edge(v.co.z)
+        lat = min(1.0, max(0.0, (v.co.x * sgn - (edge - 0.06 * H)) / (0.05 * H)))   # outer flank only
+        w = 0.7 * lat * math.exp(-max(dz, 0) / (0.09 * H))
+        if w < 0.02: continue
+        cur = {g.group: g.weight for g in v.groups}
+        tot = sum(x for gi, x in cur.items() if gi not in arm_names) or 1
+        for gi in list(cur):
+            if gi in arm_names: obj.vertex_groups[gi].remove([v.index])
+        for gi, x in cur.items():
+            if gi not in arm_names: obj.vertex_groups[gi].add([v.index], (1 - w) * x / tot, 'REPLACE')
+        ug.add([v.index], w, 'REPLACE'); nfl += 1
+print('TRIPO flank gradient verts', nfl)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
 heads = [(b.name, (b.head_local + b.tail_local) / 2) for b in arm.bones]
 body_heads = [h for h in heads if not h[0].startswith(('upperarm', 'forearm', 'hand'))]
@@ -597,7 +643,8 @@ print('TRIPO zero-weight fallbacks', nfb)
 def _Rw(axis, deg): return Matrix.Rotation(math.radians(deg), 4, axis)
 _TEST = [{'upperarm.L': _Rw('X', -75), 'forearm.L': _Rw('X', -85), 'upperarm.R': _Rw('X', 60), 'forearm.R': _Rw('X', -70)},
          {'upperarm.R': _Rw('X', -75), 'forearm.R': _Rw('X', -85), 'upperarm.L': _Rw('X', 60), 'forearm.L': _Rw('X', -70)},
-         {'upperarm.L': _Rw('Y', -140), 'upperarm.R': _Rw('Y', 140)}]
+         {'upperarm.L': _Rw('Y', -140), 'upperarm.R': _Rw('Y', 140)},
+         {'upperarm.L': _Rw('Y', -80) @ _Rw('X', -30), 'upperarm.R': _Rw('Y', 80) @ _Rw('X', 40)}]
 _rest_m = {b.name: b.matrix_local.copy() for b in arm.bones}
 def _posed(pose):
     tot = {}
@@ -621,7 +668,14 @@ for _it in range(3):
     lowarm = np.array([sum(g.weight for g in v.groups if g.group in _low_arm) for v in obj.data.vertices])
     armw = np.array([sum(g.weight for g in v.groups if g.group in _all_arm) for v in obj.data.vertices])
     bad = np.where((ratio > 3.5) & (((lowarm[E_[:, 0]] > 0.5) & (armw[E_[:, 1]] < 0.5)) | ((lowarm[E_[:, 1]] > 0.5) & (armw[E_[:, 0]] < 0.5))))[0]
-    if not len(bad): break
+    # The 'jersey wing': where the source mesh fuses the sleeve's underside to the shirt flank, those faces fan
+    # open when the arm moves. Cut sleeve-to-flank edges below the armpit that stretch badly (the character is
+    # rendered double-sided, so a slit shows shirt, not background).
+    _apz = min(armpit.values()) - 0.03 * H   # only the seam well below the true armpit; the armpit itself stretches like fabric
+    lowz = (rc[E_[:, 0], 2] < _apz) & (rc[E_[:, 1], 2] < _apz)
+    wing = np.where((ratio > 2.5) & lowz & (np.abs(armw[E_[:, 0]] - armw[E_[:, 1]]) > 0.45))[0]
+    wing = np.setdiff1d(wing, bad)
+    if not len(bad) and not len(wing): break
     nv = len(rc); kit_ = _kit if len(_kit) == nv else np.concatenate([_kit, np.zeros(nv - len(_kit), bool)])
     adj = [[] for _ in range(nv)]
     for a_, b_ in E_: adj[a_].append(b_); adj[b_].append(a_)
@@ -647,13 +701,28 @@ for _it in range(3):
                     armw[u] = 1.0
                 pulled += len(seen); continue
         cut.append(int(ei))
+    # wing edges live inside mixed triangles (one corner on the arm, two on the flank): splitting edges can't
+    # un-stretch those, so remove the bridge faces themselves.
+    wing_faces = []
+    if len(wing):
+        wset = set(map(int, wing)); ekey = {tuple(sorted(e)): i for i, e in enumerate(E_.tolist())}
+        for f in obj.data.polygons:
+            vv = list(f.vertices)
+            if any(ekey.get(tuple(sorted((vv[k], vv[(k + 1) % len(vv)])))) in wset for k in range(len(vv))):
+                wing_faces.append(f.index)
+    if False and wing_faces:
+        bm = bmesh.new(); bm.from_mesh(obj.data); bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in wing_faces], context='FACES_ONLY')
+        bm.to_mesh(obj.data); bm.free()
+        E_ = np.array([e.vertices[:] for e in obj.data.edges])
+        bad = bad[bad < len(E_)]
     if cut:
         bm = bmesh.new(); bm.from_mesh(obj.data); bm.edges.ensure_lookup_table()
         bmesh.ops.split_edges(bm, edges=[bm.edges[i] for i in cut]); bm.to_mesh(obj.data); bm.free()
         pad = len(obj.data.vertices) - len(arm_label)
         if pad > 0:
             arm_label = np.concatenate([arm_label, np.zeros(pad, np.int8)]); leg_mask = np.concatenate([leg_mask, np.zeros(pad, bool)])
-    print('TRIPO stretch repair pass', _it, 'bad edges', len(bad), 'pulled', pulled, 'cut', len(cut))
+    print('TRIPO stretch repair pass', _it, 'bad edges', len(bad), 'wing faces removed', len(wing_faces), 'pulled', pulled, 'cut', len(cut))
 
 if '--labeldbg' in A:
     _ai = {g.index: g.name for g in obj.vertex_groups if g.name.startswith(('upperarm', 'forearm', 'hand'))}
@@ -717,7 +786,7 @@ if '--stress' in A:
     ti.image = tex; t.links.new(ti.outputs[0], e.inputs[0]); t.links.new(e.outputs[0], o2.inputs[0])
     if '--catdbg' in A:
         vc_ = t.nodes.new('ShaderNodeVertexColor'); vc_.layer_name = 'cat'; t.links.new(vc_.outputs[0], e.inputs[0])
-    pm.use_backface_culling = True
+    pm.use_backface_culling = False   # the game renders characters double-sided
     obj.data.materials.append(pm)
     ro.hide_render = True
     scene.render.engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in [x.identifier for x in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items] else 'BLENDER_EEVEE'
@@ -871,6 +940,18 @@ mask = (cloth.astype(np.float32) * np.clip(zone, 0, 1))
 # Safe: the runtime only repaints kit-coloured pixels inside the mask.
 for _ in range(10):
     mask = np.maximum.reduce([mask, np.roll(mask, 1, 0), np.roll(mask, -1, 0), np.roll(mask, 1, 1), np.roll(mask, -1, 1)])
+# ...but never onto skin: pale skin's pinkish shadows sit near the jersey-red hue, and the runtime would repaint the
+# neck/chin in the kit colour. Skin-like texels that aren't right at a cloth edge leave the mask.
+skinish = (~cloth) & (sat < 0.42) & (mxc > 0.28) & ((hdist(skin_h) < 0.07) | (hdist(0.0) < 0.07) | (hdist(0.97) < 0.05))
+# pale-skin shadows inside the V-neck read as pinkish jersey red: pull low-saturation bright reds out of the cloth
+if skin_s < 0.3:
+    _pink = cloth & (sat < 0.42) & (mxc > 0.62) & (hdist(0.0) < 0.07)
+    cloth &= ~_pink; mask[_pink] = 0.0
+    print('TRIPO pale-skin pinks removed from cloth', int(_pink.sum()))
+_near_cloth = dil(cloth, 2)
+_cut = skinish & ~_near_cloth
+mask[_cut] = 0.0
+print('TRIPO mask skin-guard cleared', int(_cut.sum()), 'texels')
 mimg = bpy.data.images.new('mask', T, T, alpha=False)
 mimg.pixels[:] = np.dstack([mask, mask, mask, np.ones_like(mask)]).ravel()
 mask_path = os.path.join(OUT, NAME + '_mask.png')
