@@ -183,7 +183,7 @@ final class CharacterRig {
         let outline = Toon.outlineMaterial(width: 0.012, color: outlineColor)
         for m in model.meshes {
             let g = SCNGeometry(sources: m.sources, elements: m.elements + [m.outlineElement])
-            let noOutline = ProcessInfo.processInfo.environment["PANNA_NOOUTLINE"] != nil
+            let noOutline = ProcessInfo.processInfo.environment["PANNA_NOOUTLINE"] != nil || !model.outline
             g.materials = m.elements.map { _ in mat } + [noOutline ? SCNMaterial.hidden : outline]
             let node = SCNNode(geometry: g)
             let sk = SCNSkinner(baseGeometry: g, bones: bones, boneInverseBindTransforms: boneInv, boneWeights: m.boneWeights, boneIndices: m.boneIndices)

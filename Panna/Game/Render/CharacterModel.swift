@@ -19,6 +19,7 @@ final class CharacterModel {
         let meshes: [MeshMeta]
         let headCenter: [Float]
         let headRadius: Float
+        let outline: Bool?   // false for layered-shell models (Tripo), where a hull outline pokes through
     }
 
     struct Mesh {
@@ -39,6 +40,7 @@ final class CharacterModel {
     let meshes: [Mesh]
     let headCenter: SIMD3<Float>
     let headRadius: Float
+    var outline = true
 
     static let shared: CharacterModel = CharacterModel.load("base")!
     static var cache: [String: CharacterModel] = [:]
@@ -82,6 +84,7 @@ final class CharacterModel {
         restLocal = locals
         headCenter = SIMD3(f.headCenter[0], f.headCenter[1], f.headCenter[2])
         headRadius = f.headRadius
+        outline = f.outline ?? true
         meshes = f.meshes.map { m in
             let n = m.count
             func slice(_ off: Int, _ bytes: Int) -> Data { blob.subdata(in: off..<(off + bytes)) }

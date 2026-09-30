@@ -222,6 +222,7 @@ struct Profile: Codable {
     var selectionRuns = 0
     var passXP = 0
     var lookMigrated = false
+    var tripoPreviewGranted = false
     /// Chemistry with each Prospect: goals you create together (you assist them or they assist you).
     var bonds: [String: Int] = [:]
     var momentStars: [String: Int] = [:]
@@ -278,6 +279,12 @@ final class ProfileStore: ObservableObject {
         if p.appearance.look == nil && !p.lookMigrated, let first = Cosmetics.starterLooks.first ?? Catalog.looks.first {
             p.appearance.look = first
             p.lookMigrated = true
+        }
+        // Preview of the new character pipeline: Luna joins your squad once (playable from Locker → Play as a Prospect).
+        if !p.tripoPreviewGranted {
+            p.tripoPreviewGranted = true
+            if (p.prospects["luna"] ?? 0) == 0 { p.prospects["luna"] = 1 }
+            if !p.squad.contains("luna") { p.squad = Array((["luna"] + p.squad).prefix(2)) }
         }
         // Free looks for everyone; whoever you already play as stays yours.
         p.unlocked.formUnion(Cosmetics.defaults)
