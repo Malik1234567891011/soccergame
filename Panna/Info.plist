@@ -3,6 +3,9 @@
 <plist version="1.0">
 <dict>
 	<!-- Merged with the generated Info.plist. panna://join/CODE opens straight into a friend's private room. -->
+	<!-- Uses only standard HTTPS/WSS (exempt encryption): no export-compliance prompt on every TestFlight upload -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
