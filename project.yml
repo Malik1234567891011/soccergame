@@ -10,7 +10,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: Q7ZLXMG4SB
     CODE_SIGN_STYLE: Automatic
 targets:
   Panna:
@@ -21,6 +21,10 @@ targets:
     dependencies:
       - package: PannaCore
     settings:
+      configs:
+        Release:
+          # App Store identity (CielPM team); dev builds keep com.malik.panna
+          PRODUCT_BUNDLE_IDENTIFIER: com.panna.game
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.malik.panna
         # Device test builds run the real per-pixel work (kit recolour) at release speed.
