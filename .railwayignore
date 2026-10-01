@@ -1,0 +1,9 @@
+# Railway uploads only what the server Dockerfile needs (Server/ + Packages/PannaCore)
+art/
+Panna/
+PannaTests/
+build/
+docs/
+scripts/
+*.xcodeproj
+**/.build

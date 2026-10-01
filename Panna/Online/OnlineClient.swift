@@ -104,7 +104,7 @@ final class OnlineClient: NSObject, ObservableObject, URLSessionWebSocketDelegat
         #if targetEnvironment(simulator)
         return "ws://127.0.0.1:8080/ws"
         #else
-        return "wss://panna-server.up.railway.app/ws"
+        return "wss://panna-server-production.up.railway.app/ws"
         #endif
     }
 
