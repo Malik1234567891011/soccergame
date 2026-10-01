@@ -127,8 +127,8 @@ im.save(os.path.join(OUT, '04_friends.png'))
 # 5 — flow
 im = cover(Image.open(os.path.join(HERE, 'bg_flow.png')).convert('RGB'), W, H, 0.6)
 im = left_shade(im, 0.58)
-title(im, ['UNLEASH', 'YOUR', 'FLOW'], y=300, size=210, colors=[(255, 255, 255), (255, 255, 255), GOLD],
-      sub='Five weapons. Five supers. Your style.', tag='SUPER MODE', tag_color=GOLD)
+title(im, ['ENTER', 'FLOW', 'STATE'], y=300, size=210, colors=[(255, 255, 255), GOLD, GOLD],
+      sub='Chain skills and goals. Then go unstoppable.', tag='SUPER MODE', tag_color=GOLD)
 im.save(os.path.join(OUT, '05_flow.png'))
 
 # 6 — legend / squad: real locker screen + three cards
