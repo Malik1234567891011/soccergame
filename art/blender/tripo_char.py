@@ -938,6 +938,26 @@ print('TRIPO above-collar texels', int(above_collar.sum()))
 obj.data.materials.clear()
 for m_ in saved: obj.data.materials.append(m_)
 
+# Socks drawn yellow-green collide with the yellow trim in hue: on the lower legs only, rotate them to kit green.
+_sh = np.zeros(tex_srgb.shape[:2]); _mx0 = tex_srgb.max(2); _mn0 = tex_srgb.min(2); _d0 = _mx0 - _mn0
+_r0, _g0, _b0 = tex_srgb[:, :, 0], tex_srgb[:, :, 1], tex_srgb[:, :, 2]
+_nz = _d0 > 1e-6; _ig = _nz & (_mx0 == _g0); _ir = _nz & (_mx0 == _r0) & ~_ig
+_sh[_ir] = ((_g0 - _b0)[_ir] / _d0[_ir]) % 6; _sh[_ig] = (_b0 - _r0)[_ig] / _d0[_ig] + 2; _sh /= 6
+_sat0 = _d0 / np.maximum(_mx0, 1e-6)
+_sock = cover & (P3[:, :, 2] < Zf(0.3)) & (P3[:, :, 2] > Zf(0.04)) & (_sh > 0.15) & (_sh < 0.28) & (_sat0 > 0.3)
+if _sock.sum() > 500:
+    import colorsys as _cs
+    px_ = tex_srgb[_sock]
+    hsv = np.array([_cs.rgb_to_hsv(*c) for c in px_])
+    hsv[:, 0] = 0.33
+    tex_srgb = tex_srgb.copy(); tex_srgb[_sock] = np.array([_cs.hsv_to_rgb(*c) for c in hsv])
+    lin = np.where(tex_srgb <= 0.04045, tex_srgb / 12.92, np.power((np.clip(tex_srgb, 0, 1) + 0.055) / 1.055, 2.4)).astype(np.float32)
+    Image_out = bpy.data.images.new('outs', lin.shape[1], lin.shape[0])
+    Image_out.pixels[:] = np.dstack([lin, np.ones(lin.shape[:2], np.float32)]).ravel()
+    Image_out.filepath_raw = tex_path; Image_out.file_format = 'PNG'; Image_out.save()
+    subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '90', '-Z', '2048', tex_path, '--out', jpg], capture_output=True)
+    os.remove(tex_path)
+print('TRIPO yellow-green socks shifted to kit green', int(_sock.sum()))
 rgb = tex_srgb
 mxc = rgb.max(2); mnc = rgb.min(2); dd = mxc - mnc
 sat = dd / np.maximum(mxc, 1e-6)
@@ -957,17 +977,33 @@ def med(sel, wrap=False):
 ok = (sat > 0.35) & (mxc > 0.2)
 okc = (sat > 0.18) & (mxc > 0.12)   # shorts/socks: far from skin hue, so faded paint counts
 cal = {'red': med(body & ok & (hdist(0.0) < 0.06), True), 'blue': med(body & ok & (hdist(0.62) < 0.1)),
-       'green': med(body & okc & (hdist(0.37) < 0.1)), 'yellow': med(body & ok & (hdist(0.14) < 0.04)),
+       'green': med(body & okc & (sat > 0.3) & (hdist(0.33) < 0.12)) or med(body & okc & (hdist(0.37) < 0.1)), 'yellow': med(body & ok & (hdist(0.14) < 0.04)),
        'skin': med(head & (sat > 0.08) & (sat < 0.5) & (mxc > 0.5) & (hue < 0.12) & (hue > 0.02))}
 json.dump(cal, open(os.path.join(OUT, NAME + '_kit.json'), 'w'))
 print('TRIPO kit calibration', cal)
 skin_h, skin_s = (cal['skin'] or [0.07, 0.3])
+# Stray deeper-red flecks on the shirt (outside the recolour tolerance): flatten them to the shirt colour.
+if cal['red']:
+    _rh = cal['red'][0] % 1.0
+    _shirtwide = cover & (zone > 0.5) & (P3[:, :, 2] > Zf(0.5)) & (P3[:, :, 2] < Zf(0.82))
+    _fleck = _shirtwide & (sat > 0.3) & (mxc > 0.15) & (hdist(_rh) > 0.03) & (np.minimum(hdist(_rh), hdist(0.0)) < 0.09) & (hdist(skin_h) > 0.03)
+    _base = shirtz & (sat > 0.4) & (hdist(_rh) < 0.02)
+    if _fleck.sum() and _base.sum() > 100:
+        rgb = rgb.copy(); rgb[_fleck] = np.median(rgb[_base], axis=0)
+        mxc = rgb.max(2); mnc = rgb.min(2); dd = mxc - mnc; sat = dd / np.maximum(mxc, 1e-6)
+        hue = np.zeros_like(mxc); nz = dd > 1e-6
+        r_, g_, b_ = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+        ir = nz & (mxc == r_); ig = nz & (mxc == g_) & ~ir; ib = nz & ~ir & ~ig
+        hue[ir] = ((g_ - b_)[ir] / dd[ir]) % 6; hue[ig] = (b_ - r_)[ig] / dd[ig] + 2; hue[ib] = (r_ - g_)[ib] / dd[ib] + 4; hue /= 6
+        _flecks_fixed = True
+    print('TRIPO shirt flecks flattened', int(_fleck.sum()))
 cloth = np.zeros_like(body)
 for k, tol in (('red', 0.045), ('blue', 0.1), ('green', 0.1), ('yellow', 0.03)):
     if cal[k]:
         c = (okc if k in ('blue', 'green') else ok) & (hdist(cal[k][0] % 1.0) < tol)
         if k in ('red', 'yellow') and skin_s > 0.25: c &= hdist(skin_h) > 0.03
         cloth |= c
+if globals().get('_flecks_fixed'): cloth |= _fleck   # flattened flecks are shirt now: recolour them too
 def dil(m, n):
     m = m.copy()
     for _ in range(n): m |= np.roll(m, 1, 0) | np.roll(m, -1, 0) | np.roll(m, 1, 1) | np.roll(m, -1, 1)
@@ -1012,6 +1048,13 @@ if neck_skin is not None and _rp.any():
     subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '90', '-Z', '2048', tex_path, '--out', jpg], capture_output=True)
     os.remove(tex_path)
 print('TRIPO neck texels repainted as skin', int(_rp.sum()))
+if globals().get('_flecks_fixed') and not (bad & known).any():
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, np.power((np.clip(rgb, 0, 1) + 0.055) / 1.055, 2.4)).astype(np.float32)
+    Image_out = bpy.data.images.new('outf', lin.shape[1], lin.shape[0])
+    Image_out.pixels[:] = np.dstack([lin, np.ones(lin.shape[:2], np.float32)]).ravel()
+    Image_out.filepath_raw = tex_path; Image_out.file_format = 'PNG'; Image_out.save()
+    subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '90', '-Z', '2048', tex_path, '--out', jpg], capture_output=True)
+    os.remove(tex_path)
 cloth = dil(ero(cloth, 1), 2) & (zone > 0.3)
 mask = (cloth.astype(np.float32) * np.clip(zone, 0, 1))
 mask_in = mask.copy()

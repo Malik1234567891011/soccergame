@@ -58,7 +58,7 @@ enum Cosmetics {
         "l09": "LE MAESTRO", "l10": "EL FENÓMENO", "l15": "FLASH", "l11": "THE MACHINE", "l14": "EGOIST",
         "l17": "O PRÍNCIPE", "l18": "COLD", "l19": "EL NIÑO", "l20": "THE HEIR", "l21": "THE VIKING", "l22": "VA-VA-VOOM",
         "l23": "GHOST", "l24": "ECLIPSE", "l25": "XENO", "l26": "ONI", "l27": "KITSUNE", "l28": "MECHA", "l29": "RONIN",
-        "l30": "ASCENDED", "l31": "DIHNO",
+        "l30": "ASCENDED", "l31": "DIHNO", "l32": "KAM",
     ]
     /// One-line persona for the collectible looks (street legends, not real people).
     static let lookTaglines: [String: String] = [
@@ -87,6 +87,7 @@ enum Cosmetics {
         "l29": "Masterless · One touch. One cut. One goal.",
         "l30": "Beyond · Power level: still rising.",
         "l31": "Brazil · The grin comes first. Then the elastico.",
+        "l32": "Poland · Palestine · Never rushes. Never misses.",
     ]
     static let lookRarity: [String: Rarity] = [
         "l01": .common, "l02": .common, "l03": .common, "l05": .common, "l13": .common, "l16": .common,
@@ -96,6 +97,7 @@ enum Cosmetics {
         "l18": .rare, "l21": .rare, "l25": .rare, "l27": .rare, "l28": .rare,
         "l17": .epic, "l19": .epic, "l20": .epic, "l23": .epic, "l24": .epic, "l26": .epic, "l29": .epic,
         "l22": .legendary, "l30": .legendary, "l31": .legendary,
+        "l32": .epic,
     ]
     /// What the shop and pass can offer: things you can actually see on a painted footballer.
     static let sellable: Set<CosmeticCategory> = [.look, .trail]
