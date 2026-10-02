@@ -229,10 +229,9 @@ final class MatchRenderer {
         camera.vignettingPower = 1.2
         camera.saturation = 1.12
         camera.contrast = 0.08
-        camera.screenSpaceAmbientOcclusionIntensity = 0.7
-        camera.screenSpaceAmbientOcclusionRadius = 0.6
-        camera.colorFringeStrength = 0.4
-        camera.colorFringeIntensity = 0.6
+        // No SSAO / colour fringe: the two priciest post effects, near-invisible from the match camera (phones ran hot).
+        camera.screenSpaceAmbientOcclusionIntensity = 0
+        camera.colorFringeStrength = 0
         cameraNode.camera = camera
         cameraNode.position = SCNVector3(0, 17, 17)
         cameraNode.look(at: SCNVector3(0, 0, 1))
@@ -431,7 +430,7 @@ final class MatchRenderer {
         let humanFlow = human?.inFlow ?? false
         flowGrade += ((humanFlow ? 1 : 0) - flowGrade) * min(1, dt * 4)
         camera.saturation = CGFloat(1.12 + flowGrade * 0.12)
-        camera.bloomIntensity = CGFloat(0.9 + flowGrade * 0.35 + slowmoGrade * 0.6)
+        camera.bloomIntensity = RenderBudget.constrained ? 0 : CGFloat(0.9 + flowGrade * 0.35 + slowmoGrade * 0.6)
         camera.colorFringeStrength = CGFloat(0.4 + flowGrade * 1.2 + slowmoGrade * 1.5)
         camera.vignettingIntensity = CGFloat(0.55 + flowGrade * 0.35 + slowmoGrade * 0.3)
         camera.wantsDepthOfField = celebrationCam > 0.3

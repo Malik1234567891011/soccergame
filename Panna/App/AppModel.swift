@@ -276,8 +276,8 @@ final class AppModel: ObservableObject {
                              homeColor: info.home.color, awayColor: info.away.color, homeAISkill: info.home.aiSkill, awayAISkill: info.away.aiSkill,
                              theme: ArenaTheme.byId(info.theme), humanId: info.you)
         spec.rules = info.rules
-        let template = MatchSim(home: info.home, away: info.away, rules: info.rules, seed: 1).state
-        let driver = OnlineDriver(template: template, you: info.you)
+        let predictor = MatchSim(home: info.home, away: info.away, rules: info.rules, seed: 1)
+        let driver = OnlineDriver(predictor: predictor, you: info.you)
         driver.send = online.makeSender()
         online.driver = driver
         let m = MatchFactory.controller(driver: driver, spec: spec)

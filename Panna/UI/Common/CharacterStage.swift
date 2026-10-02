@@ -110,6 +110,9 @@ extension PoseInput {
 
 struct StageView: UIViewRepresentable {
     let stage: CharacterStage
+    final class Coordinator { var tokens: [NSObjectProtocol] = []
+        deinit { tokens.forEach(NotificationCenter.default.removeObserver) } }
+    func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> SCNView {
         let v = SCNView()
         v.scene = stage.scene
@@ -119,6 +122,7 @@ struct StageView: UIViewRepresentable {
         v.rendersContinuously = true
         v.antialiasingMode = .multisampling4X
         v.backgroundColor = .clear
+        context.coordinator.tokens = RenderBudget.observe(v, fps: 30)   // a turning character doesn't need 60 fps
         return v
     }
     func updateUIView(_ uiView: SCNView, context: Context) {}

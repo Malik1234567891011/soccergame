@@ -8,6 +8,12 @@ public final class MatchSim {
 
     public private(set) var state = MatchState()
 
+    /// Online prediction: rewind to an authoritative server state, then replay local inputs on top.
+    public func restore(_ s: MatchState) {
+        state = s
+        events.removeAll()
+    }
+
     /// Tutorial: fill a player's FLOW bar so the lesson can be tried on the spot.
     public func grantHype(_ player: Int, to value: Float) {
         guard player >= 0 && player < state.players.count else { return }

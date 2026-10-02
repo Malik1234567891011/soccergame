@@ -4,6 +4,9 @@ import PannaCore
 
 struct SceneViewHost: UIViewRepresentable {
     let controller: MatchController
+    final class Coordinator { var tokens: [NSObjectProtocol] = []
+        deinit { tokens.forEach(NotificationCenter.default.removeObserver) } }
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> SCNView {
         let v = SCNView(frame: .zero, options: [SCNView.Option.preferredRenderingAPI.rawValue: SCNRenderingAPI.metal.rawValue])
@@ -12,8 +15,8 @@ struct SceneViewHost: UIViewRepresentable {
         v.delegate = controller
         v.isPlaying = true
         v.rendersContinuously = true
-        v.preferredFramesPerSecond = 60
         v.antialiasingMode = .multisampling4X
+        context.coordinator.tokens = RenderBudget.observe(v, fps: 60)
         v.backgroundColor = .black
         v.isUserInteractionEnabled = false
         v.showsStatistics = ProcessInfo.processInfo.environment["PANNA_STATS"] != nil

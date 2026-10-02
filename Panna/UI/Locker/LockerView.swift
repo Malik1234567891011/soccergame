@@ -8,6 +8,7 @@ struct LockerView: View {
     @State private var tab = 0
     @State private var draft = Appearance()
     @State private var buying: CosmeticItem?
+    @State private var confirming: CosmeticItem?
 
     let tabs = [("LOOK", "face.smiling"), ("HAIR", "comb.fill"), ("KIT", "tshirt.fill"), ("BOOTS", "shoeprints.fill"), ("GEAR", "eyeglasses"), ("MOVES", "figure.soccer")]
 
@@ -64,6 +65,15 @@ struct LockerView: View {
                 Spacer()
             }
             if let item = buying { buySheet(item) }
+            if let item = confirming {
+                ConfirmSpend(item: item, balance: store.p.coins, onConfirm: {
+                    confirming = nil
+                    if store.buy(item) {
+                        AudioEngine.shared.play(.reward); buying = nil
+                        if item.id.hasPrefix("look.") { let id = String(item.id.dropFirst(5)); set { $0.look = id } }
+                    } else { AudioEngine.shared.play(.uiBack) }
+                }, onCancel: { confirming = nil })
+            }
             if tab == 5 {
                 TipCard(key: "moves", icon: "figure.soccer", title: "MOVES, FINISHES & TRAITS", lines: [
                     "Your WEAPON sets your playstyle and your FLOW super. Change it any time.",
@@ -414,8 +424,7 @@ struct LockerView: View {
                         Button("CLOSE") { closeBuy() }.font(.label(12, .black)).foregroundStyle(.white.opacity(0.6))
                     } else {
                     GlowButton(title: "UNLOCK · \(item.price)", icon: "circle.hexagongrid.fill", colors: [Theme.gold, Color(hex: 0xE0A020)], height: 52) {
-                        if store.buy(item) { AudioEngine.shared.play(.reward); buying = nil; if let id = lookId { set { $0.look = id } } }
-                        else { AudioEngine.shared.play(.uiBack) }
+                        if store.p.coins >= item.price { confirming = item } else { AudioEngine.shared.play(.uiBack) }
                     }
                     .frame(width: 230)
                     .opacity(store.p.coins >= item.price ? 1 : 0.5)

@@ -349,6 +349,7 @@ struct ShopView: View {
     @EnvironmentObject var store: ProfileStore
     @StateObject private var shop = Shop()
     @State private var tab = 0
+    @State private var confirmItem: CosmeticItem?
 
     var body: some View {
         ZStack {
@@ -415,6 +416,14 @@ struct ShopView: View {
             Task { await shop.load() }
             if ProcessInfo.processInfo.environment["PANNA_SHOPTAB"] == "pass" { tab = 1 }
         }
+        .overlay {
+            if let it = confirmItem {
+                ConfirmSpend(item: it, balance: store.p.coins, onConfirm: {
+                    confirmItem = nil
+                    if store.buy(it) { AudioEngine.shared.play(.reward) } else { AudioEngine.shared.play(.uiBack) }
+                }, onCancel: { confirmItem = nil })
+            }
+        }
     }
 
     func tabChip(_ t: String, _ i: Int) -> some View {
@@ -441,7 +450,7 @@ struct ShopView: View {
             Text(it.name).font(.display(18)).foregroundStyle(.white)
             Text(it.category == .look ? "FOOTBALLER" : (it.category == .trail ? "FLOW TRAIL" : it.category.rawValue.uppercased())).font(.label(10, .black)).foregroundStyle(.white.opacity(0.5))
             Button {
-                if store.buy(it) { AudioEngine.shared.play(.reward) } else { AudioEngine.shared.play(.uiBack) }
+                if store.p.coins >= it.price { confirmItem = it } else { AudioEngine.shared.play(.uiBack) }
             } label: {
                 Text(owned ? "OWNED" : "\(it.price) COINS").font(.label(13, .black)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity).frame(height: 34)
