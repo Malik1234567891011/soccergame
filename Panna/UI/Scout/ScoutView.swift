@@ -10,7 +10,7 @@ struct ScoutView: View {
     @State private var revealing = false
     @State private var showOdds = false
     @State private var featured = 0
-    let featuredIds = ["kairo", "luna", "vega"]
+    let featuredIds = ["vuk", "kairo", "luna", "vega"]
 
     var body: some View {
         let f = Catalog.prospect(featuredIds[featured % featuredIds.count])!
@@ -24,7 +24,7 @@ struct ScoutView: View {
                     }
                     LinearGradient(colors: [.clear, .black.opacity(0.95)], startPoint: .center, endPoint: .bottom)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("FEATURED SCOUT").font(.label(11, .black)).tracking(2).foregroundStyle(Theme.gold)
+                        Text(f.rarity == .mythic ? "MYTHIC · 0.75%" : "FEATURED SCOUT").font(.label(11, .black)).tracking(2).foregroundStyle(f.rarity == .mythic ? Rarity.mythic.color : Theme.gold)
                             .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(.black.opacity(0.55)))
                         Text(f.name).font(.display(40)).foregroundStyle(.white)
                         Text("\(f.nation.uppercased()) · \(f.title.uppercased()) · \(f.playstyle.rawValue.uppercased())").font(.label(12, .black)).foregroundStyle(Color(hex: f.aura))
@@ -34,7 +34,7 @@ struct ScoutView: View {
                 }
                 .frame(width: 330, height: 300)
                 .clipShape(Skew(amount: 22))
-                .overlay(Skew(amount: 22).stroke(Rarity.legendary.color, lineWidth: 2))
+                .overlay(Skew(amount: 22).stroke(f.rarity >= .legendary ? f.rarity.color : Rarity.legendary.color, lineWidth: f.rarity == .mythic ? 3 : 2))
                 .shadow(color: Color(hex: f.aura).opacity(0.5), radius: 24)
                 .onTapGesture { withAnimation { featured += 1 } }
 
@@ -236,7 +236,7 @@ struct PackReveal: View {
         let p = sorted[index]
         withAnimation(.spring(response: 0.45, dampingFraction: 0.6)) { phase = 3; burst = true }
         switch p.rarity {
-        case .legendary: AudioEngine.shared.play(.revealLegend)
+        case .legendary, .mythic: AudioEngine.shared.play(.revealLegend)
         case .epic: AudioEngine.shared.play(.revealEpic)
         default: AudioEngine.shared.play(.revealRare)
         }
@@ -320,7 +320,7 @@ struct PackReveal: View {
                         Text("tap to continue").font(.label(11)).foregroundStyle(.white.opacity(0.4)).padding(.top, 8)
                     }
                 }
-                if p.rarity >= .epic { ParticleBurst(color: color, count: p.rarity == .legendary ? 90 : 50) }
+                if p.rarity >= .epic { ParticleBurst(color: color, count: p.rarity == .mythic ? 160 : (p.rarity == .legendary ? 90 : 50)) }
             }
         }
     }

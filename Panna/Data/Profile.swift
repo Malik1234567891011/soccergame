@@ -10,7 +10,7 @@ struct CosmeticItem: Identifiable, Hashable {
     let name: String
     let category: CosmeticCategory
     let rarity: Rarity
-    var price: Int { [0, 400, 1000, 2500][rarity.rawValue] }
+    var price: Int { [0, 400, 1000, 2500, 5000][rarity.rawValue] }
 }
 
 enum Cosmetics {
@@ -605,7 +605,8 @@ final class ProfileStore: ObservableObject {
 
     static let packCost = 160
     static let tenCost = 1440
-    static let rates: [(Rarity, Double)] = [(.legendary, 0.015), (.epic, 0.12), (.rare, 0.45), (.common, 0.415)]
+    static let mythicRate = 0.0075   // half the legendary rate; no pity
+    static let rates: [(Rarity, Double)] = [(.mythic, mythicRate), (.legendary, 0.015), (.epic, 0.12), (.rare, 0.45), (.common, 0.415 - mythicRate)]
 
     func pull(count: Int, free: Bool = false) -> [Pull]? {
         let cost = free ? 0 : (count >= 10 ? ProfileStore.tenCost : ProfileStore.packCost * count)
@@ -621,8 +622,11 @@ final class ProfileStore: ObservableObject {
             var legendaryChance = 0.015
             if p.pity >= 40 { legendaryChance += Double(p.pity - 39) * 0.06 }
             var rarity: Rarity
-            let roll = Double.random(in: 0..<1)
-            if p.pity >= 60 || roll < legendaryChance { rarity = .legendary }
+            var roll = Double.random(in: 0..<1)
+            let mythic = roll < ProfileStore.mythicRate || ProcessInfo.processInfo.environment["PANNA_FORCEMYTHIC"] != nil
+            roll -= ProfileStore.mythicRate   // the mythic slice comes out of commons
+            if mythic { rarity = .mythic }
+            else if p.pity >= 60 || roll < legendaryChance { rarity = .legendary }
             else if p.pityEpic >= 10 || roll < legendaryChance + 0.12 { rarity = .epic }
             else if roll < legendaryChance + 0.12 + 0.45 { rarity = .rare }
             else { rarity = .common }
@@ -630,7 +634,7 @@ final class ProfileStore: ObservableObject {
             if p.totalPulls == 1 && rarity < .epic { rarity = .epic }   // first ever pull always delights
             if ProcessInfo.processInfo.environment["PANNA_FORCEPROSPECT"] != nil && rarity < .epic { rarity = .epic }
             if rarity >= .epic { guaranteedEpic = false; p.pityEpic = 0 }
-            if rarity == .legendary { p.pity = 0 }
+            if rarity >= .legendary { p.pity = 0 }
             out.append(grant(rarity))
         }
         save()
@@ -648,7 +652,7 @@ final class ProfileStore: ObservableObject {
         let prospects = Catalog.prospects.filter { $0.rarity == rarity }
         let legacies = Catalog.legacies.filter { $0.rarity == rarity }
         let forced = ProcessInfo.processInfo.environment["PANNA_FORCEPROSPECT"] != nil   // QA: walkout reveal
-        let pickProspect = !prospects.isEmpty && (forced || Double.random(in: 0..<1) < (rarity == .rare ? 0.2 : 0.3))
+        let pickProspect = !prospects.isEmpty && (forced || legacies.isEmpty || Double.random(in: 0..<1) < (rarity == .rare ? 0.2 : 0.3))
         if pickProspect, let pr = prospects.randomElement() {
             pull.prospect = pr.id
             let have = p.prospects[pr.id] ?? 0

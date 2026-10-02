@@ -52,7 +52,7 @@ enum Selection {
         for p in perks {
             let copies = owned.filter { $0 == p.id }.count
             if copies >= 3 { continue }
-            let w = [0, 6, 3, 1][p.rarity.rawValue]
+            let w = [0, 6, 3, 1, 0][p.rarity.rawValue]
             pool += Array(repeating: p.id, count: w)
         }
         var out: [String] = []

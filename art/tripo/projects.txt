@@ -43,3 +43,5 @@ l14 9ee58be9-c372-49f8-b2ca-eb00837934fe
 l16 024d61b1-1e69-477a-8f77-e3f75f35ec7f
 l31 9f2f4b0b-d392-4639-ad65-7bc3737da022
 l32 780b0c20-d166-480f-8096-dc9dfbe0a153 Kam (Malik's cousin)
+vuk 56a7eb67-b533-453b-8b1e-d05dae6dd129 Vuk (Mythic)
+  post: heterochromia.py vuk 960 130 1040 175

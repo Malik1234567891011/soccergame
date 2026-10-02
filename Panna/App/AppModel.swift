@@ -60,6 +60,9 @@ final class AppModel: ObservableObject {
                            appearance: p.appearance, celebration: p.celebration)
     }
 
+    /// Mythic Prospects are elite everywhere, not just in their playstyle's lane: they finish, pass, run and defend.
+    static let mythicBase = PlayerStats(pace: 0.84, control: 0.80, shooting: 0.88, passing: 0.82, defending: 0.80, physical: 0.86)
+
     func prospectParticipant(_ id: String, kit: Appearance?, level: Int, bond: Int = 0) -> Participant {
         let pr = Catalog.prospect(id)!
         var a = pr.appearance
@@ -73,7 +76,7 @@ final class AppModel: ObservableObject {
         let bonus = PlayerStats(pace: b.pace * lvl, control: b.control * lvl, shooting: b.shooting * lvl,
                                 passing: b.passing * lvl, defending: b.defending * lvl, physical: b.physical * lvl)
         let setup = PlayerSetup(name: pr.name.capitalized, loadout: Loadout(playstyle: pr.playstyle, skill: pr.skill, shot: pr.shot, trait: pr.trait),
-                                stats: pr.playstyle.baseStats.adding(bonus), isHuman: false)
+                                stats: (pr.rarity == .mythic ? Self.mythicBase : pr.playstyle.baseStats).adding(bonus), isHuman: false)
         return Participant(setup: setup, appearance: a, celebration: Int.random(in: 0..<Celebration.allCases.count), model: pr.model)
     }
 

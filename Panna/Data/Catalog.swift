@@ -2,13 +2,13 @@ import SwiftUI
 import PannaCore
 
 enum Rarity: Int, Codable, CaseIterable, Comparable {
-    case common, rare, epic, legendary
+    case common, rare, epic, legendary, mythic   // mythic: Scout-only Prospects, half the legendary odds
     static func < (a: Rarity, b: Rarity) -> Bool { a.rawValue < b.rawValue }
-    var name: String { ["COMMON", "RARE", "EPIC", "LEGENDARY"][rawValue] }
-    var color: Color { [Color(hex: 0x9AA3B5), Color(hex: 0x3B8CFF), Color(hex: 0xB26BFF), Color(hex: 0xFFC83B)][rawValue] }
-    var glow: Color { [Color(hex: 0xC8D0E0), Color(hex: 0x6FB0FF), Color(hex: 0xD49BFF), Color(hex: 0xFFE27A)][rawValue] }
-    var uiColor: UIColor { UIColor(hex: [0x9AA3B5, 0x3B8CFF, 0xB26BFF, 0xFFC83B][rawValue]) }
-    var shardValue: Int { [5, 20, 100, 400][rawValue] }
+    var name: String { ["COMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"][rawValue] }
+    var color: Color { [Color(hex: 0x9AA3B5), Color(hex: 0x3B8CFF), Color(hex: 0xB26BFF), Color(hex: 0xFFC83B), Color(hex: 0xFF2D55)][rawValue] }
+    var glow: Color { [Color(hex: 0xC8D0E0), Color(hex: 0x6FB0FF), Color(hex: 0xD49BFF), Color(hex: 0xFFE27A), Color(hex: 0xFF8FA6)][rawValue] }
+    var uiColor: UIColor { UIColor(hex: [0x9AA3B5, 0x3B8CFF, 0xB26BFF, 0xFFC83B, 0xFF2D55][rawValue]) }
+    var shardValue: Int { [5, 20, 100, 400, 1500][rawValue] }
 }
 
 // MARK: - Legacy cards (legends' techniques)
@@ -171,6 +171,8 @@ enum Catalog {
     static func legacy(for effect: LegacyEffect) -> LegacyCard? { legacies.first { $0.effect == effect } }
 
     static let prospects: [Prospect] = [
+        prospect("vuk", "VUK", "Serbia", "🇷🇸", "The Apex", .finisher, .mythic, .elastico, .knuckle, .engine,
+                 "I don't chase the ball. I hunt it.", hair: .spikes, hairColor: 0, skin: 0, eye: 6, kit: (0x16181F, 0xFF2D55), eyes: .sharp, aura: 0xFF2D55),
         prospect("kairo", "KAIRO", "Brazil", "🇧🇷", "The Samba Ghost", .trickster, .legendary, .rainbow, .finesse, .noLook,
                  "Defenders don't lose me. They lose themselves.", hair: .locs, hairColor: 0, skin: 4, eye: 1, kit: (0xFFD23B, 0x1E9E4A), eyes: .sharp, aura: 0x39FF88),
         prospect("luna", "LUNA", "Argentina", "🇦🇷", "Mirage", .trickster, .legendary, .elastico, .chip, .tikiTaka,
@@ -220,10 +222,12 @@ enum Catalog {
         case "zeke": a.headwear = .cap
         case "luna", "juno": a.build = .lean
         case "kairo": a.accessory = .wristbands
+        case "vuk": a.build = .strong; a.sleeves = .compression
         default: break
         }
         let bonus: PlayerStats = {
             let b: Float = r == .legendary ? 0.08 : (r == .epic ? 0.05 : 0.03)
+            if r == .mythic { return PlayerStats(pace: 0.06, control: 0.06, shooting: 0.08, passing: 0.06, defending: 0.06, physical: 0.06) }
             switch ps {
             case .winger: return PlayerStats(pace: b, control: b / 2, shooting: 0, passing: 0, defending: 0, physical: 0)
             case .maestro: return PlayerStats(pace: 0, control: b / 2, shooting: 0, passing: b, defending: 0, physical: 0)
